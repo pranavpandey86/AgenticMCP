@@ -1,0 +1,49 @@
+# .NET Build and Runtime
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.dll
+*.pdb
+*.exe
+
+# Environment and Secrets
+.env
+*.env.local
+appsettings.Development.json
+secrets.json
+
+# VS Code
+.vscode/
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Logs
+logs/
+*.log
+
+# Node modules and Angular build artifacts
+node_modules/
+npm-debug.log*
+dist/
+.angular/cache/
+.angular/
+
+# Database
+*.db
+*.sqlite
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# API Keys and Secrets
+*.key
+*.pem

@@ -1,0 +1,516 @@
+using AgenticOrderingSystem.API.MCP.Interfaces;
+using AgenticOrderingSystem.API.MCP.Models;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+                    Metadata = new AIResponseMetadata
+                    {
+                        ProcessingTimeMs = 0,
+                        Model = "error",
+                        RequestId = Guid.NewGuid().ToString()
+                    }
+                };
+            }ext.Json;
+using System.Text.Json.Serialization;
+
+namespace AgenticOrderingSystem.API.MCP.Services
+{
+    /// <summary>
+    /// Service for integrating with Perplexity AI API
+    /// </summary>
+    public class PerplexityAIService : IPerplexityAIService
+    {
+        private readonly HttpClient _httpClient;
+        private readonly ILogger<PerplexityAIService> _logger;
+        private readonly string _apiKey;
+        private readonly string _baseUrl;
+
+        public PerplexityAIService(HttpClient httpClient, ILogger<PerplexityAIService> logger, IConfiguration configuration)
+        {
+            _httpClient = httpClient;
+            _logger = logger;
+            
+            _apiKey = Environment.GetEnvironmentVariable("PERPLEXITY_API_KEY") 
+                ?? configuration["PerplexityAI:ApiKey"] 
+                ?? throw new InvalidOperationException("Perplexity API key not configured");
+            
+            _baseUrl = Environment.GetEnvironmentVariable("PERPLEXITY_BASE_URL") 
+                ?? configuration["PerplexityAI:BaseUrl"] 
+                ?? "https://api.perplexity.ai";
+
+            _httpClient.BaseAddress = new Uri(_baseUrl);
+            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {_apiKey}");
+            _httpClient.DefaultRequestHeaders.Add("User-Agent", "AgenticOrderingSystem/1.0");
+        }
+
+        public async Task<AIResponse> SendMessageAsync(AIRequest request, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                _logger.LogInformation("Sending message to Perplexity AI for session {SessionId}", request.SessionId);
+
+                var perplexityRequest = new
+                {
+                    model = "sonar",
+                    messages = BuildMessagesFromRequest(request),
+                    max_tokens = request.MaxTokens ?? 1000,
+                    temperature = request.Temperature ?? 0.7,
+                    stream = false
+                };
+
+                var json = JsonSerializer.Serialize(perplexityRequest);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.PostAsync("/chat/completions", content, cancellationToken);
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                    _logger.LogError("Perplexity API error: {StatusCode} - {Content}", response.StatusCode, errorContent);
+                    _logger.LogError("Request was: {RequestBody}", json);
+                    
+                    return new AIResponse
+                    {
+                        Message = $"API Error {response.StatusCode}: {errorContent}",
+                        Confidence = 0.0,
+                        Metadata = new AIResponseMetadata
+                        {
+                            ProcessingTimeMs = 0,
+                            Model = "error",
+                            RequestId = Guid.NewGuid().ToString()
+                        }
+                    };
+                }
+
+                var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                var perplexityResponse = JsonSerializer.Deserialize<PerplexityResponse>(responseContent);
+
+                if (perplexityResponse?.Choices?.Any() != true)
+                {
+                    throw new InvalidOperationException("No response choices received from Perplexity API");
+                }
+
+                var choice = perplexityResponse.Choices.First();
+                var aiResponse = new AIResponse
+                {
+                    Message = choice.Message?.Content ?? "No response generated",
+                    Confidence = 0.8, // Default confidence, could be enhanced
+                    DetectedIntent = ExtractIntent(choice.Message?.Content ?? ""),
+                    ToolCalls = ExtractToolCalls(choice.Message?.Content ?? ""),
+                    Metadata = new AIResponseMetadata
+                    {
+                        ProcessingTimeMs = 0, // Would need to track this
+                        Model = perplexityRequest.model,
+                        TokensUsed = perplexityResponse.Usage != null ? new TokenUsage
+                        {
+                            InputTokens = perplexityResponse.Usage.PromptTokens,
+                            OutputTokens = perplexityResponse.Usage.CompletionTokens,
+                            TotalTokens = perplexityResponse.Usage.TotalTokens
+                        } : null,
+                        RequestId = Guid.NewGuid().ToString()
+                    }
+                };
+
+                _logger.LogInformation("Received response from Perplexity AI with {TokenCount} tokens", 
+                    perplexityResponse.Usage?.TotalTokens ?? 0);
+
+                return aiResponse;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error calling Perplexity AI");
+                
+                return new AIResponse
+                {
+                    Message = "I apologize, but I encountered an error processing your request. Please try again.",
+                    Confidence = 0.0,
+                    Metadata = new AIResponseMetadata
+                    {
+                        ProcessingTimeMs = 0,
+                        Model = "error",
+                        RequestId = Guid.NewGuid().ToString()
+                    }
+                };
+            }
+        }
+
+        public async Task<RejectionAnalysis> AnalyzeRejectionAsync(string orderId, object rejectionDetails, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var analysisPrompt = BuildRejectionAnalysisPrompt(orderId, rejectionDetails);
+                
+                var request = new AIRequest
+                {
+                    SessionId = $"rejection_analysis_{orderId}",
+                    Message = analysisPrompt,
+                    MaxTokens = 1500,
+                    Temperature = 0.3 // Lower temperature for more consistent analysis
+                };
+
+                var response = await SendMessageAsync(request, cancellationToken);
+                
+                // Parse the AI response to extract structured rejection analysis
+                return ParseRejectionAnalysis(orderId, response.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error analyzing rejection for order {OrderId}", orderId);
+                
+                return new RejectionAnalysis
+                {
+                    OrderId = orderId,
+                    OverallReason = "Analysis failed",
+                    Confidence = 0.0,
+                    EstimatedFixTimeMinutes = 30
+                };
+            }
+        }
+
+        public async Task<List<AIsuggestion>> GenerateSuggestionsAsync(string orderId, string problemContext, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var suggestionPrompt = BuildSuggestionPrompt(orderId, problemContext);
+                
+                var request = new AIRequest
+                {
+                    SessionId = $"suggestions_{orderId}",
+                    Message = suggestionPrompt,
+                    MaxTokens = 1200,
+                    Temperature = 0.5
+                };
+
+                var response = await SendMessageAsync(request, cancellationToken);
+                
+                return ParseSuggestions(response.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating suggestions for order {OrderId}", orderId);
+                
+                return new List<AIsuggestion>
+                {
+                    new()
+                    {
+                        Title = "Manual Review Required",
+                        Description = "Unable to generate automatic suggestions. Please review the order manually.",
+                        Action = "manual_review",
+                        Priority = "medium"
+                    }
+                };
+            }
+        }
+
+        public async Task<ConversationResponse> GetConversationResponseAsync(string sessionId, string message, List<ToolSchema> availableTools, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var conversationPrompt = BuildConversationPrompt(message, availableTools);
+                
+                var request = new AIRequest
+                {
+                    SessionId = sessionId,
+                    Message = conversationPrompt,
+                    AvailableTools = availableTools,
+                    MaxTokens = 1000,
+                    Temperature = 0.7
+                };
+
+                var response = await SendMessageAsync(request, cancellationToken);
+                
+                return new ConversationResponse
+                {
+                    Message = response.Message,
+                    ToolCalls = response.ToolCalls,
+                    Confidence = response.Confidence,
+                    DetectedIntent = response.DetectedIntent,
+                    ConversationComplete = DetermineConversationComplete(response.Message),
+                    NextActions = ExtractNextActions(response.Message),
+                    Metadata = response.Metadata
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting conversation response for session {SessionId}", sessionId);
+                
+                return new ConversationResponse
+                {
+                    Message = "I apologize, but I'm having trouble understanding your request. Could you please rephrase it?",
+                    Confidence = 0.0,
+                    ConversationComplete = false,
+                    Metadata = new AIResponseMetadata
+                    {
+                        ProcessingTimeMs = 0,
+                        Model = "error",
+                        RequestId = Guid.NewGuid().ToString()
+                    }
+                };
+            }
+        }
+
+        private List<object> BuildMessagesFromRequest(AIRequest request)
+        {
+            var messages = new List<object>();
+
+            // Add system message with context
+            var systemMessage = BuildSystemPrompt(request);
+            messages.Add(new { role = "system", content = systemMessage });
+
+            // Add conversation history if available
+            if (request.Context?.ConversationHistory?.Any() == true)
+            {
+                foreach (var msg in request.Context.ConversationHistory.TakeLast(10)) // Limit history
+                {
+                    messages.Add(new 
+                    { 
+                        role = msg.Sender == "user" ? "user" : "assistant", 
+                        content = msg.Message 
+                    });
+                }
+            }
+
+            // Add current user message
+            messages.Add(new { role = "user", content = request.Message });
+
+            return messages;
+        }
+
+        private string BuildSystemPrompt(AIRequest request)
+        {
+            var prompt = new StringBuilder();
+            
+            prompt.AppendLine("You are an intelligent AI assistant for an enterprise order management system.");
+            prompt.AppendLine("Your role is to help users with order-related questions and issues.");
+            prompt.AppendLine();
+            prompt.AppendLine("Key capabilities:");
+            prompt.AppendLine("- Analyze order rejections and provide specific fix recommendations");
+            prompt.AppendLine("- Help users understand order status and approval workflows");
+            prompt.AppendLine("- Guide users through order modification and resubmission processes");
+            prompt.AppendLine("- Provide insights into approval requirements and policies");
+            prompt.AppendLine();
+            
+            if (request.AvailableTools?.Any() == true)
+            {
+                prompt.AppendLine("Available tools you can use:");
+                foreach (var tool in request.AvailableTools)
+                {
+                    prompt.AppendLine($"- {tool.Name}: {tool.Description}");
+                }
+                prompt.AppendLine();
+            }
+
+            prompt.AppendLine("Guidelines:");
+            prompt.AppendLine("- Be helpful, concise, and professional");
+            prompt.AppendLine("- Provide specific, actionable advice");
+            prompt.AppendLine("- Use tools when appropriate to gather information");
+            prompt.AppendLine("- If you need to call tools, explain what you're doing");
+            prompt.AppendLine("- Focus on solving the user's immediate problem");
+
+            return prompt.ToString();
+        }
+
+        private string BuildRejectionAnalysisPrompt(string orderId, object rejectionDetails)
+        {
+            return $@"
+Analyze this order rejection and provide structured insights:
+
+Order ID: {orderId}
+Rejection Details: {JsonSerializer.Serialize(rejectionDetails)}
+
+Please provide:
+1. Overall reason for rejection (summary)
+2. Specific issues that need to be addressed
+3. Suggested actions for each issue
+4. Priority level for each issue (high/medium/low)
+5. Estimated time to fix
+6. Any policy or business rule considerations
+
+Format your response as a structured analysis that can help the user understand exactly what needs to be fixed.
+";
+        }
+
+        private string BuildSuggestionPrompt(string orderId, string problemContext)
+        {
+            return $@"
+Generate helpful suggestions for this order issue:
+
+Order ID: {orderId}
+Problem Context: {problemContext}
+
+Please provide specific, actionable suggestions that include:
+1. Clear title and description
+2. Specific action to take
+3. Priority level
+4. Expected impact
+5. Any required information or fields
+
+Focus on practical solutions that can resolve the issue efficiently.
+";
+        }
+
+        private string BuildConversationPrompt(string message, List<ToolSchema> availableTools)
+        {
+            var prompt = new StringBuilder();
+            prompt.AppendLine($"User message: {message}");
+            prompt.AppendLine();
+            
+            if (availableTools?.Any() == true)
+            {
+                prompt.AppendLine("You have access to these tools to help answer the user's question:");
+                foreach (var tool in availableTools)
+                {
+                    prompt.AppendLine($"- {tool.Name}: {tool.Description}");
+                }
+                prompt.AppendLine();
+                prompt.AppendLine("Use appropriate tools to gather information before responding.");
+            }
+
+            return prompt.ToString();
+        }
+
+        private string? ExtractIntent(string message)
+        {
+            // Simple intent extraction - could be enhanced with ML
+            var lowerMessage = message.ToLowerInvariant();
+            
+            if (lowerMessage.Contains("reject") || lowerMessage.Contains("denied"))
+                return "fix_rejected_order";
+            if (lowerMessage.Contains("status") || lowerMessage.Contains("where"))
+                return "check_order_status";
+            if (lowerMessage.Contains("help") || lowerMessage.Contains("how"))
+                return "get_help";
+            if (lowerMessage.Contains("submit") || lowerMessage.Contains("resubmit"))
+                return "resubmit_order";
+            
+            return "general_inquiry";
+        }
+
+        private List<ToolCall>? ExtractToolCalls(string message)
+        {
+            // For now, return null - tool calling would need more sophisticated parsing
+            // In a full implementation, this would parse structured tool call requests
+            return null;
+        }
+
+        private RejectionAnalysis ParseRejectionAnalysis(string orderId, string aiResponse)
+        {
+            // Simple parsing - in production, this would be more sophisticated
+            return new RejectionAnalysis
+            {
+                OrderId = orderId,
+                OverallReason = ExtractOverallReason(aiResponse),
+                SpecificIssues = ExtractSpecificIssues(aiResponse),
+                Suggestions = ExtractSuggestionsFromAnalysis(aiResponse),
+                Confidence = 0.8,
+                EstimatedFixTimeMinutes = EstimateFixTime(aiResponse)
+            };
+        }
+
+        private List<AIsuggestion> ParseSuggestions(string aiResponse)
+        {
+            // Simple parsing - would be enhanced in production
+            var suggestions = new List<AIsuggestion>();
+            
+            // For now, create a general suggestion from the AI response
+            suggestions.Add(new AIsuggestion
+            {
+                Title = "AI Generated Suggestion",
+                Description = aiResponse,
+                Action = "review_and_modify",
+                Priority = "medium",
+                EstimatedImpact = "Should help resolve the issue"
+            });
+
+            return suggestions;
+        }
+
+        private bool DetermineConversationComplete(string message)
+        {
+            var lowerMessage = message.ToLowerInvariant();
+            return lowerMessage.Contains("completed") || 
+                   lowerMessage.Contains("resolved") || 
+                   lowerMessage.Contains("nothing else");
+        }
+
+        private List<string>? ExtractNextActions(string message)
+        {
+            // Simple extraction - could be enhanced
+            var actions = new List<string>();
+            
+            if (message.Contains("submit") || message.Contains("resubmit"))
+                actions.Add("Submit order");
+            if (message.Contains("modify") || message.Contains("edit"))
+                actions.Add("Modify order details");
+            if (message.Contains("contact") || message.Contains("manager"))
+                actions.Add("Contact approver");
+            
+            return actions.Any() ? actions : null;
+        }
+
+        private string ExtractOverallReason(string response)
+        {
+            // Simple extraction - would use NLP in production
+            var lines = response.Split('\n');
+            return lines.FirstOrDefault(l => l.Contains("reason") || l.Contains("summary"))?.Trim() 
+                ?? "Order requires review and corrections";
+        }
+
+        private List<SpecificIssue> ExtractSpecificIssues(string response)
+        {
+            // Simple extraction - would be more sophisticated in production
+            return new List<SpecificIssue>
+            {
+                new()
+                {
+                    QuestionKey = "general",
+                    QuestionText = "Order Review",
+                    IssueDescription = "Order requires review based on AI analysis",
+                    SuggestedAction = "Review and modify as suggested",
+                    Severity = "medium",
+                    Category = "business"
+                }
+            };
+        }
+
+        private List<AIsuggestion> ExtractSuggestionsFromAnalysis(string response)
+        {
+            return ParseSuggestions(response);
+        }
+
+        private int EstimateFixTime(string response)
+        {
+            // Simple estimation - could analyze complexity
+            return 30; // 30 minutes default
+        }
+
+        // Perplexity API response models
+        private class PerplexityResponse
+        {
+            public List<Choice>? Choices { get; set; }
+            public Usage? Usage { get; set; }
+        }
+
+        private class Choice
+        {
+            public Message? Message { get; set; }
+        }
+
+        private class Message
+        {
+            public string? Content { get; set; }
+        }
+
+        private class Usage
+        {
+            [JsonPropertyName("prompt_tokens")]
+            public int PromptTokens { get; set; }
+            
+            [JsonPropertyName("completion_tokens")]
+            public int CompletionTokens { get; set; }
+            
+            [JsonPropertyName("total_tokens")]
+            public int TotalTokens { get; set; }
+        }
+    }
+}
