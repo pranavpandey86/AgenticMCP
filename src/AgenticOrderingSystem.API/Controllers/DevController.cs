@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using AgenticOrderingSystem.API.Services;
 using AgenticOrderingSystem.API.Models;
+using AgenticOrderingSystem.API.Data;
 using MongoDB.Driver;
 
 namespace AgenticOrderingSystem.API.Controllers;
@@ -14,15 +15,18 @@ public class DevController : ControllerBase
 {
     private readonly IDataSeedingService _dataSeedingService;
     private readonly IDatabaseService _databaseService;
+    private readonly TeamBasedOrderSeeder _teamBasedOrderSeeder;
     private readonly ILogger<DevController> _logger;
 
     public DevController(
         IDataSeedingService dataSeedingService,
         IDatabaseService databaseService,
+        TeamBasedOrderSeeder teamBasedOrderSeeder,
         ILogger<DevController> logger)
     {
         _dataSeedingService = dataSeedingService;
         _databaseService = databaseService;
+        _teamBasedOrderSeeder = teamBasedOrderSeeder;
         _logger = logger;
     }
 
@@ -303,6 +307,37 @@ public class DevController : ControllerBase
         {
             _logger.LogError(ex, "Failed to seed scenario-based orders");
             return StatusCode(500, new { Error = "Failed to seed scenario-based orders", Message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Seed team-based orders with realistic failure patterns and success examples
+    /// </summary>
+    [HttpPost("seed-team-orders")]
+    public async Task<IActionResult> SeedTeamOrders()
+    {
+        try
+        {
+            _logger.LogInformation("Seeding team-based orders via API request");
+            await _teamBasedOrderSeeder.SeedTeamBasedOrdersAsync();
+
+            // Get updated counts
+            var usersCount = await _databaseService.Users.CountDocumentsAsync(_ => true);
+            var ordersCount = await _databaseService.Orders.CountDocumentsAsync(_ => true);
+
+            return Ok(new
+            {
+                Message = "Team-based orders seeded successfully",
+                UsersCount = usersCount,
+                OrdersCount = ordersCount,
+                Description = "Added team structure with managers and team members, plus realistic failure and success scenarios for failure analysis",
+                Timestamp = DateTime.UtcNow
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to seed team-based orders");
+            return StatusCode(500, new { Error = "Failed to seed team-based orders", Message = ex.Message });
         }
     }
 }

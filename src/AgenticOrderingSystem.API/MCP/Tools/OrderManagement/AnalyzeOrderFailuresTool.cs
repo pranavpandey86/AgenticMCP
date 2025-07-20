@@ -88,7 +88,7 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
                 var successAnalysis = await AnalyzeSuccessPatterns(analysisContext);
                 
                 // Generate intelligent recommendations
-                var recommendations = GenerateIntelligentRecommendations(failureAnalysis, successAnalysis, analysisContext);
+                var recommendations = await GenerateIntelligentRecommendations(failureAnalysis, successAnalysis, analysisContext);
 
                 var responseData = new
                 {
@@ -275,7 +275,7 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
             return analysis;
         }
 
-        private IntelligentRecommendations GenerateIntelligentRecommendations(
+        private async Task<IntelligentRecommendations> GenerateIntelligentRecommendations(
             FailureAnalysis failureAnalysis, 
             SuccessAnalysis successAnalysis, 
             AnalysisContext context)
@@ -285,7 +285,7 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
             // Immediate actions for current order
             if (context.TargetOrder != null)
             {
-                recommendations.ImmediateActions = GenerateOrderSpecificActions(context.TargetOrder, failureAnalysis, successAnalysis);
+                recommendations.ImmediateActions = await GenerateOrderSpecificActions(context.TargetOrder, failureAnalysis, successAnalysis);
             }
             
             // Preventive strategies
@@ -303,7 +303,7 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
             return recommendations;
         }
 
-        private List<string> GenerateOrderSpecificActions(Order order, FailureAnalysis failureAnalysis, SuccessAnalysis successAnalysis)
+        private async Task<List<string>> GenerateOrderSpecificActions(Order order, FailureAnalysis failureAnalysis, SuccessAnalysis successAnalysis)
         {
             var actions = new List<string>();
             
@@ -317,6 +317,26 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
                     actions.Add($"Address common {order.ProductInfo.Category} rejection reason: {reason.Replace("_", " ").ToLower()}");
                 }
             }
+            
+            // Add team-based recommendations with specific value comparisons
+            var teamSuccessExamples = await GetTeamSuccessExamplesAsync(order);
+            if (teamSuccessExamples.Any())
+            {
+                var successExample = teamSuccessExamples.First();
+                
+                // Add value comparison format
+                actions.Add("🔄 TEAM SUCCESS COMPARISON:");
+                actions.Add($"❌ Your order: {order.ProductInfo.Name}");
+                actions.Add($"✅ {successExample.RequesterName} succeeded with: {successExample.ProductName}");
+                
+                // Add specific value differences
+                await AddSpecificValueComparisons(order, successExample, actions);
+                
+                actions.Add($"📋 Success Pattern: {successExample.SuccessFactors}");
+            }
+            
+            // Version/Product availability checks
+            await AddProductVersionRecommendationsAsync(order, actions);
             
             // Budget-related suggestions
             if (failureAnalysis.CommonReasons.Any(r => r.Reason.Contains("budget")))
@@ -634,6 +654,222 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
             public string OptimalAmountRange { get; set; } = "";
             public string AverageApprovalTime { get; set; } = "";
             public string SuccessRate { get; set; } = "";
+        }
+
+        private class TeamSuccessExample
+        {
+            public string RequesterName { get; set; } = "";
+            public string ProductName { get; set; } = "";
+            public string SuccessFactors { get; set; } = "";
+            public string Department { get; set; } = "";
+        }
+
+        /// <summary>
+        /// Find successful orders from team members for similar products/categories
+        /// </summary>
+        private async Task<List<TeamSuccessExample>> GetTeamSuccessExamplesAsync(Order failedOrder)
+        {
+            try
+            {
+                var teamSuccessExamples = new List<TeamSuccessExample>();
+                
+                // Get the requester to find their manager
+                var requester = await _userService.GetUserByIdAsync(failedOrder.RequesterId);
+                if (requester?.ManagerId == null) return teamSuccessExamples;
+                
+                // Find team members with same manager - using search functionality
+                var allActiveUsers = await _userService.GetActiveUsersAsync(1, 1000); // Get more users
+                var teamMembers = allActiveUsers.Where(u => u.ManagerId == requester.ManagerId && u.Id != failedOrder.RequesterId).ToList();
+                
+                if (!teamMembers.Any()) return teamSuccessExamples;
+                
+                // Find successful orders from team members for similar products
+                var teamMemberIds = teamMembers.Select(tm => tm.Id).ToList();
+                
+                // Search for approved orders in the same category from team members
+                var searchCriteria = new OrderSearchCriteria
+                {
+                    Status = "approved",
+                    ProductCategory = failedOrder.ProductInfo.Category
+                };
+                
+                var allOrders = await _orderService.SearchOrdersAsync(searchCriteria);
+                
+                var successfulOrders = allOrders.Where(o => 
+                    teamMemberIds.Contains(o.RequesterId) &&
+                    o.CreatedAt >= DateTime.UtcNow.AddDays(-90) // Last 90 days
+                ).OrderByDescending(o => o.CreatedAt)
+                .Take(3)
+                .ToList();
+                
+                foreach (var successOrder in successfulOrders)
+                {
+                    var teammate = teamMembers.FirstOrDefault(tm => tm.Id == successOrder.RequesterId);
+                    if (teammate != null)
+                    {
+                        var successFactors = ExtractSuccessFactors(successOrder);
+                        teamSuccessExamples.Add(new TeamSuccessExample
+                        {
+                            RequesterName = teammate.FullName,
+                            ProductName = successOrder.ProductInfo.Name,
+                            SuccessFactors = successFactors,
+                            Department = teammate.Department
+                        });
+                    }
+                }
+                
+                return teamSuccessExamples;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error getting team success examples for order {OrderId}", failedOrder.Id);
+                return new List<TeamSuccessExample>();
+            }
+        }
+
+        /// <summary>
+        /// Add product version and availability recommendations
+        /// </summary>
+        private Task AddProductVersionRecommendationsAsync(Order order, List<string> actions)
+        {
+            try
+            {
+                // Check internal notes for version-related issues
+                var hasVersionIssues = order.Metadata?.InternalNotes?.Any(note => 
+                    note.Note.ToLower().Contains("discontinued") ||
+                    note.Note.ToLower().Contains("no longer available") ||
+                    note.Note.ToLower().Contains("version") ||
+                    note.Note.ToLower().Contains("replaced")
+                ) ?? false;
+
+                if (hasVersionIssues)
+                {
+                    actions.Add($"🔄 Product Update: {order.ProductInfo.Name} may have version issues");
+                    actions.Add($"💡 Suggestion: Check for current versions in the {order.ProductInfo.Category} category");
+                }
+                
+                // Check approval comments for version issues
+                var hasApprovalVersionIssues = order.ApprovalWorkflow?.History?.Any(action =>
+                    !string.IsNullOrEmpty(action.Comments) &&
+                    (action.Comments.ToLower().Contains("discontinued") ||
+                     action.Comments.ToLower().Contains("version") ||
+                     action.Comments.ToLower().Contains("no longer available"))
+                ) ?? false;
+
+                if (hasApprovalVersionIssues)
+                {
+                    actions.Add($"⚠️ Approval Note: Version-related concerns were raised during approval");
+                }
+                
+                // Add category-specific recommendations
+                if (order.ProductInfo.Category == "software")
+                {
+                    actions.Add("📋 Software Tip: Always verify current licensing and version requirements before ordering");
+                }
+                else if (order.ProductInfo.Category == "hardware")
+                {
+                    actions.Add("📋 Hardware Tip: Check for latest models and ensure compatibility with existing systems");
+                }
+
+                return Task.CompletedTask;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error adding product version recommendations for order {OrderId}", order.Id);
+                return Task.CompletedTask;
+            }
+        }
+
+        /// <summary>
+        /// Extract success factors from an approved order
+        /// </summary>
+        private string ExtractSuccessFactors(Order order)
+        {
+            var factors = new List<string>();
+            
+            // Business justification quality
+            if (!string.IsNullOrEmpty(order.BusinessJustification) && order.BusinessJustification.Length > 100)
+            {
+                factors.Add("Detailed business justification");
+            }
+            
+            // Approval speed (simplified check using completion time)
+            if (order.ApprovalWorkflow?.CompletedAt.HasValue == true)
+            {
+                var approvalTime = order.ApprovalWorkflow.CompletedAt.Value - order.CreatedAt;
+                if (approvalTime.TotalHours < 24)
+                {
+                    factors.Add("Fast approval (same day)");
+                }
+            }
+            
+            // Amount reasonableness
+            if (order.TotalAmount <= 500)
+            {
+                factors.Add("Reasonable amount");
+            }
+            
+            // Complete information
+            if (!string.IsNullOrEmpty(order.BusinessJustification) && order.Quantity > 0)
+            {
+                factors.Add("Complete order information");
+            }
+            
+            return factors.Any() ? string.Join(", ", factors) : "Standard approval process";
+        }
+        
+        /// <summary>
+        /// Add specific value comparisons between failed order and successful teammate order
+        /// </summary>
+        private async Task AddSpecificValueComparisons(Order failedOrder, TeamSuccessExample successExample, List<string> actions)
+        {
+            // Get the successful order details to compare
+            var searchCriteria = new OrderSearchCriteria
+            {
+                SearchText = successExample.ProductName,
+                Status = "approved",
+                ProductCategory = failedOrder.ProductInfo.Category
+            };
+            
+            var successfulOrders = await _orderService.SearchOrdersAsync(searchCriteria);
+            var successfulOrder = successfulOrders.FirstOrDefault(o => 
+                o.ProductInfo.Name.Contains(successExample.ProductName, StringComparison.OrdinalIgnoreCase) &&
+                o.CreatedAt >= DateTime.UtcNow.AddDays(-90));
+            
+            if (successfulOrder != null)
+            {
+                // Product version comparison
+                if (failedOrder.ProductInfo.Name != successfulOrder.ProductInfo.Name)
+                {
+                    actions.Add($"🔧 PRODUCT VERSION:");
+                    actions.Add($"   ❌ You requested: {failedOrder.ProductInfo.Name}");
+                    actions.Add($"   ✅ {successExample.RequesterName} got approved: {successfulOrder.ProductInfo.Name}");
+                }
+                
+                // Business justification comparison
+                if (!string.IsNullOrEmpty(failedOrder.BusinessJustification) && !string.IsNullOrEmpty(successfulOrder.BusinessJustification))
+                {
+                    actions.Add($"📝 BUSINESS JUSTIFICATION:");
+                    actions.Add($"   ❌ Your justification ({failedOrder.BusinessJustification.Length} chars): \"{failedOrder.BusinessJustification}\"");
+                    actions.Add($"   ✅ {successExample.RequesterName}'s justification ({successfulOrder.BusinessJustification.Length} chars): \"{successfulOrder.BusinessJustification}\"");
+                }
+                
+                // Amount comparison
+                if (Math.Abs(failedOrder.TotalAmount - successfulOrder.TotalAmount) > 5)
+                {
+                    actions.Add($"💰 AMOUNT:");
+                    actions.Add($"   ❌ Your amount: ${failedOrder.TotalAmount:F2}");
+                    actions.Add($"   ✅ {successExample.RequesterName}'s amount: ${successfulOrder.TotalAmount:F2}");
+                }
+                
+                // Priority comparison
+                if (failedOrder.Priority != successfulOrder.Priority)
+                {
+                    actions.Add($"⚡ PRIORITY:");
+                    actions.Add($"   ❌ Your priority: {failedOrder.Priority}");
+                    actions.Add($"   ✅ {successExample.RequesterName}'s priority: {successfulOrder.Priority}");
+                }
+            }
         }
     }
 }

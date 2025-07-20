@@ -36,6 +36,7 @@ builder.Services.AddSingleton<IDatabaseService, DatabaseService>();
 
 // Register Data Seeding Service
 builder.Services.AddScoped<IDataSeedingService, DataSeedingService>();
+builder.Services.AddScoped<AgenticOrderingSystem.API.Data.TeamBasedOrderSeeder>();
 
 // Register Business Services
 builder.Services.AddScoped<IUserService, UserService>();
