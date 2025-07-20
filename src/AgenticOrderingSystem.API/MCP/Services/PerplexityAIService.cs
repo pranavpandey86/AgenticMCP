@@ -42,10 +42,10 @@ namespace AgenticOrderingSystem.API.MCP.Services
 
                 var perplexityRequest = new
                 {
-                    model = "sonar",
+                    model = "sonar-reasoning",
                     messages = BuildMessagesFromRequest(request),
-                    max_tokens = request.MaxTokens ?? 1000,
-                    temperature = request.Temperature ?? 0.7,
+                    max_tokens = request.MaxTokens ?? 2000,
+                    temperature = request.Temperature ?? 0.3,
                     stream = false
                 };
 
@@ -148,20 +148,30 @@ namespace AgenticOrderingSystem.API.MCP.Services
                 // Build enhanced message with available tools context
                 var toolsDescription = BuildToolsDescription(availableTools);
                 var enhancedMessage = $@"
-SYSTEM CONTEXT: You are an AI assistant for an ordering system with access to these specific MCP tools:
+SYSTEM CONTEXT: You are an AI assistant for an ordering system. You have access to these MCP tools:
 
 {toolsDescription}
 
-IMPORTANT INSTRUCTIONS:
-1. When users ask for order information, status, or details - ALWAYS use the appropriate tool to get actual data
-2. DO NOT just describe the tools - USE them to answer the user's question
-3. When a user asks about a specific order ID, immediately use get_order_details with that orderId
-4. When a user asks about orders for a user, immediately use get_user_orders with that userId
-5. Format tool usage as: TOOL_CALL: {{""toolName"": ""get_order_details"", ""parameters"": {{""orderId"": ""SCEN-ADOBE-APPROVED-001"", ""includeHistory"": true, ""includeApprovals"": true}}}}
+REASONING APPROACH (for sonar-reasoning model):
+1. ANALYZE the user's request to understand what they need
+2. IDENTIFY the appropriate tool based on these patterns:
+   - Order details/status → get_order_details
+   - User order history → get_user_orders  
+   - Failure analysis/rejection reasons → analyze_order_failures
+3. EXECUTE the tool with proper parameters
+4. RESPOND with the actual data from the tool
+
+FAILURE ANALYSIS KEYWORDS that trigger 'analyze_order_failures':
+- ""failure"", ""reject"", ""denied"", ""why"", ""reason""
+- ""analyze"", ""pattern"", ""common"", ""success factor""
+- ""recommendation"", ""improve"", ""approval rate""
+
+TOOL CALL FORMAT (exact syntax required):
+TOOL_CALL: {{""toolName"": ""analyze_order_failures"", ""parameters"": {{""analysisType"": ""all"", ""timeRange"": ""quarter""}}}}
 
 USER MESSAGE: {message}
 
-Execute the appropriate tool to answer this question with real data, don't just describe what tools are available.";
+Think step-by-step and use the appropriate tool to get real data.";
 
                 var request = new AIRequest
                 {
