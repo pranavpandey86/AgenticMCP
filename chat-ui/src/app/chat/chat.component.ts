@@ -19,9 +19,10 @@ export class ChatComponent implements OnInit, AfterViewChecked {
   // Quick action suggestions
   quickSuggestions = [
     "What tools are available?",
-    "Show me orders for user123",
-    "Check order details for ORD123",
-    "Help me with order management"
+    "Show me orders for user_emp_john",
+    "Why was order REJ-2025-07-0001 rejected?",
+    "Analyze failure patterns for recent orders",
+    "What are common rejection reasons?"
   ];
 
   constructor(private chatService: ChatService) {}
@@ -205,8 +206,70 @@ export class ChatComponent implements OnInit, AfterViewChecked {
   private formatSuccessfulToolResult(data: any, toolNumber: number): string {
     let formatted = `📊 **Tool ${toolNumber} Results**\n\n`;
 
+    // Handle failure analysis results
+    if (data.analysisContext && data.failureAnalysis) {
+      formatted += `**🔍 Failure Analysis Report**\n\n`;
+      formatted += `**Analysis Scope**: ${data.analysisContext.scope}\n`;
+      formatted += `**Time Range**: ${data.analysisContext.timeRange}\n`;
+      formatted += `**Orders Analyzed**: ${data.analysisContext.ordersAnalyzed}\n\n`;
+
+      // Common failure reasons
+      if (data.failureAnalysis.commonFailureReasons && data.failureAnalysis.commonFailureReasons.length > 0) {
+        formatted += `**❌ Common Failure Reasons:**\n`;
+        data.failureAnalysis.commonFailureReasons.slice(0, 3).forEach((reason: any, index: number) => {
+          formatted += `${index + 1}. **${reason.reason.replace(/_/g, ' ').toUpperCase()}** (${reason.percentage.toFixed(1)}%)\n`;
+          if (reason.exampleComments && reason.exampleComments.length > 0) {
+            formatted += `   💬 "${reason.exampleComments[0]}"\n`;
+          }
+        });
+        formatted += '\n';
+      }
+
+      // Success patterns
+      if (data.successAnalysis && data.successAnalysis.successFactors) {
+        formatted += `**✅ Success Factors:**\n`;
+        data.successAnalysis.successFactors.slice(0, 3).forEach((factor: any) => {
+          formatted += `• **${factor.factor}** (${factor.impact} impact)\n`;
+          formatted += `  ${factor.description}\n`;
+        });
+        formatted += '\n';
+      }
+
+      // Recommendations
+      if (data.recommendations) {
+        if (data.recommendations.immediateActions && data.recommendations.immediateActions.length > 0) {
+          formatted += `**⚡ Immediate Actions:**\n`;
+          data.recommendations.immediateActions.forEach((action: string) => {
+            formatted += `• ${action}\n`;
+          });
+          formatted += '\n';
+        }
+
+        if (data.recommendations.preventiveStrategies && data.recommendations.preventiveStrategies.length > 0) {
+          formatted += `**🛡️ Prevention Strategies:**\n`;
+          data.recommendations.preventiveStrategies.slice(0, 3).forEach((strategy: string) => {
+            formatted += `• ${strategy}\n`;
+          });
+          formatted += '\n';
+        }
+
+        if (data.recommendations.confidenceScore) {
+          const confidence = (data.recommendations.confidenceScore * 100).toFixed(0);
+          formatted += `**🎯 Confidence Score**: ${confidence}%\n\n`;
+        }
+      }
+
+      // Key insights
+      if (data.insights && data.insights.keyFindings) {
+        formatted += `**💡 Key Insights:**\n`;
+        data.insights.keyFindings.forEach((finding: string) => {
+          formatted += `• ${finding}\n`;
+        });
+        formatted += '\n';
+      }
+    }
     // Handle single order details (from get_order_details tool)
-    if (data.order && data.order.orderId) {
+    else if (data.order && data.order.orderId) {
       const order = data.order;
       formatted += `**Order Details: ${order.orderNumber}**\n\n`;
       formatted += `• **ID**: ${order.orderId}\n`;

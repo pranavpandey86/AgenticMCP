@@ -225,6 +225,7 @@ namespace AgenticOrderingSystem.API.MCP.Services
             // Order Management Tools
             RegisterTool<GetUserOrdersTool>("get_user_orders");
             RegisterTool<GetOrderDetailsTool>("get_order_details");
+            RegisterTool<AnalyzeOrderFailuresTool>("analyze_order_failures");
             // Add more tools as they are implemented
 
             _logger.LogInformation("Registered {ToolCount} MCP tools", _toolTypes.Count);

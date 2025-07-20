@@ -48,6 +48,7 @@ builder.Services.AddScoped<AgenticOrderingSystem.API.MCP.Interfaces.IPerplexityA
 // Register MCP Tools
 builder.Services.AddScoped<AgenticOrderingSystem.API.MCP.Tools.OrderManagement.GetUserOrdersTool>();
 builder.Services.AddScoped<AgenticOrderingSystem.API.MCP.Tools.OrderManagement.GetOrderDetailsTool>();
+builder.Services.AddScoped<AgenticOrderingSystem.API.MCP.Tools.OrderManagement.AnalyzeOrderFailuresTool>();
 
 // Add HTTP Client for AI services
 builder.Services.AddHttpClient<AgenticOrderingSystem.API.MCP.Services.PerplexityAIService>();
