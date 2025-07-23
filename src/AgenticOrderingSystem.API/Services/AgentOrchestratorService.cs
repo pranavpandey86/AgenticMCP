@@ -47,6 +47,13 @@ public class AgentOrchestratorService : IAgentOrchestratorService
             var conversation = await _conversationService.GetOrCreateConversationAsync(userId, conversationId);
             conversation.AddMessage("user", message);
 
+            // Check if this is a confirmation response to a pending action
+            if (!string.IsNullOrEmpty(conversation.PendingAction) && IsConfirmationMessage(message))
+            {
+                var confirmed = IsPositiveConfirmation(message);
+                return await HandleConfirmationAsync(userId, conversation.Id, confirmed);
+            }
+
             // Use AI to determine the next action and appropriate tool
             var action = await DecideNextActionAsync(userId, message, conversation);
             
@@ -89,6 +96,26 @@ public class AgentOrchestratorService : IAgentOrchestratorService
         }
     }
 
+    private bool IsConfirmationMessage(string message)
+    {
+        var lowerMessage = message.ToLowerInvariant().Trim();
+        var confirmationPatterns = new[]
+        {
+            "yes", "y", "yeah", "yep", "sure", "ok", "okay", "proceed", "do it", "go ahead",
+            "no", "n", "nope", "cancel", "stop", "don't", "abort"
+        };
+        
+        return confirmationPatterns.Any(pattern => lowerMessage == pattern || lowerMessage.Contains(pattern));
+    }
+
+    private bool IsPositiveConfirmation(string message)
+    {
+        var lowerMessage = message.ToLowerInvariant().Trim();
+        var positivePatterns = new[] { "yes", "y", "yeah", "yep", "sure", "ok", "okay", "proceed", "do it", "go ahead" };
+        
+        return positivePatterns.Any(pattern => lowerMessage == pattern || lowerMessage.Contains(pattern));
+    }
+
     public async Task<AgentResponse> HandleConfirmationAsync(string userId, string conversationId, bool confirmed)
     {
         var conversation = await _conversationService.GetConversationAsync(conversationId);
@@ -104,7 +131,28 @@ public class AgentOrchestratorService : IAgentOrchestratorService
 
         if (confirmed)
         {
-            // Execute the pending action
+            // Execute the pending action if one exists
+            if (!string.IsNullOrEmpty(conversation.PendingAction))
+            {
+                _logger.LogInformation("Executing pending action: {Action} for conversation {ConversationId}", 
+                    conversation.PendingAction, conversationId);
+
+                switch (conversation.PendingAction.ToLowerInvariant())
+                {
+                    case "update_order":
+                        return await ExecutePendingUpdateOrder(userId, conversation);
+                    
+                    default:
+                        _logger.LogWarning("Unknown pending action: {Action}", conversation.PendingAction);
+                        break;
+                }
+                
+                // Clear the pending action after execution
+                conversation.PendingAction = null;
+                conversation.PendingActionData.Clear();
+                await _conversationService.UpdateConversationAsync(conversation);
+            }
+            
             return new AgentResponse
             {
                 Message = "Thank you for confirming! I've processed your request.",
@@ -114,10 +162,72 @@ public class AgentOrchestratorService : IAgentOrchestratorService
         }
         else
         {
+            if (!string.IsNullOrEmpty(conversation.PendingAction))
+            {
+                conversation.PendingAction = null;
+                conversation.PendingActionData.Clear();
+                await _conversationService.UpdateConversationAsync(conversation);
+            }
+            
             return new AgentResponse
             {
                 Message = "Understood, I won't proceed with that action. Is there anything else I can help you with?",
                 ConversationId = conversationId,
+                RequiresConfirmation = false
+            };
+        }
+    }
+
+    private async Task<AgentResponse> ExecutePendingUpdateOrder(string userId, ConversationState conversation)
+    {
+        try
+        {
+            var updateTool = _tools.FirstOrDefault(t => t.Name == "update_order");
+            if (updateTool == null)
+            {
+                return new AgentResponse
+                {
+                    Message = "I don't have access to the order update tool right now.",
+                    ConversationId = conversation.Id,
+                    RequiresConfirmation = false
+                };
+            }
+
+            var context = new AgentToolContext
+            {
+                UserId = userId,
+                ConversationId = conversation.Id,
+                Parameters = conversation.PendingActionData,
+                UserMessage = "User confirmed order update"
+            };
+
+            var result = await updateTool.ExecuteAsync(context);
+            
+            if (!result.Success)
+            {
+                return new AgentResponse
+                {
+                    Message = $"I couldn't update the order: {result.Error}",
+                    ConversationId = conversation.Id,
+                    RequiresConfirmation = false
+                };
+            }
+
+            return new AgentResponse
+            {
+                Message = "✅ Perfect! I've successfully updated your order and resubmitted it for approval. Your order now has a much better chance of being approved based on the improvements I made!",
+                ConversationId = conversation.Id,
+                RequiresConfirmation = false,
+                Data = result.Data
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error executing pending update order action");
+            return new AgentResponse
+            {
+                Message = "I encountered an error while updating your order. Please try again.",
+                ConversationId = conversation.Id,
                 RequiresConfirmation = false
             };
         }
@@ -380,13 +490,13 @@ EXTRACT ORDER ID AND DETERMINE ACTION, RESPOND WITH JSON:";
             };
         }
 
-        var analysisResponse = GenerateCleanAnalysisResponse(result, parameters);
+        var analysisResponse = await GenerateCleanAnalysisResponse(result, parameters, conversation);
 
         var finalResponse = new AgentResponse
         {
             Message = analysisResponse,
             ConversationId = conversation.Id,
-            RequiresConfirmation = false,
+            RequiresConfirmation = true,
             Data = result.Data
         };
         
@@ -505,7 +615,7 @@ EXTRACT ORDER ID AND DETERMINE ACTION, RESPOND WITH JSON:";
         }
     }
 
-    private string GenerateCleanAnalysisResponse(AgentToolResult result, Dictionary<string, object> parameters)
+    private async Task<string> GenerateCleanAnalysisResponse(AgentToolResult result, Dictionary<string, object> parameters, ConversationState conversation)
     {
         try
         {
@@ -625,6 +735,10 @@ EXTRACT ORDER ID AND DETERMINE ACTION, RESPOND WITH JSON:";
             }
             
             response += "🤖 **Do you want me to update your order with the correct values and resubmit it?**";
+            
+            conversation.PendingAction = "update_order";
+            conversation.PendingActionData = parameters;
+            await _conversationService.UpdateConversationAsync(conversation);
             
             return response;
         }
