@@ -34,15 +34,23 @@ public class DatabaseService : IDatabaseService
 
         try
         {
+            var mongoClient = new MongoClient(settings.ProductDesignerConnectionString);
+            
             // Initialize ProductDesigner database
-            var productDesignerClient = new MongoClient(settings.ProductDesignerConnectionString);
-            _productDesignerDatabase = productDesignerClient.GetDatabase(settings.ProductDesignerDatabaseName);
+            _productDesignerDatabase = mongoClient.GetDatabase(settings.ProductDesignerDatabaseName);
 
-            // Initialize CMP database
-            var cmpClient = new MongoClient(settings.CMPConnectionString);
-            _cmpDatabase = cmpClient.GetDatabase(settings.CMPDatabaseName);
+            // Initialize CMP database - reuse the same client if connection strings are the same
+            if (settings.CMPConnectionString != settings.ProductDesignerConnectionString)
+            {
+                var cmpClient = new MongoClient(settings.CMPConnectionString);
+                _cmpDatabase = cmpClient.GetDatabase(settings.CMPDatabaseName);
+            }
+            else
+            {
+                _cmpDatabase = mongoClient.GetDatabase(settings.CMPDatabaseName);
+            }
 
-            _logger.LogInformation("Database connections initialized successfully");
+            _logger.LogInformation("Database connections initialized successfully with optimized client reuse");
         }
         catch (Exception ex)
         {
