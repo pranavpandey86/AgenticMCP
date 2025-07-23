@@ -15,6 +15,7 @@ export class ChatComponent implements OnInit, AfterViewChecked {
   isConnected: boolean = false;
   serverStatus: string = 'Connecting...';
   availableTools: number = 0;
+  pendingConfirmation: { conversationId: string, requiresConfirmation: boolean } | null = null;
 
   // Quick action suggestions
   quickSuggestions = [
@@ -83,45 +84,38 @@ export class ChatComponent implements OnInit, AfterViewChecked {
     // Show typing indicator
     this.isTyping = true;
 
+    // Check if this is a confirmation response
+    if (this.pendingConfirmation && this.isConfirmationResponse(messageToSend)) {
+      this.handleConfirmation(messageToSend);
+      return;
+    }
+
+    // Clear any pending confirmation
+    this.pendingConfirmation = null;
+
     // Send to AI service
     this.chatService.sendMessage(messageToSend).subscribe({
       next: (response) => {
         this.isTyping = false;
         
-        if (response.success) {
-          // Handle the new response structure
-          let displayMessage = '';
-          let confidence = 0.8;
-          let intent = '';
-          
-          // Check if we have tool results
-          if (response.data.toolResults && response.data.toolResults.length > 0) {
-            displayMessage = this.formatToolResults(response.data.toolResults, response.data.toolExecutionSummary);
-            confidence = response.data.conversationResponse?.confidence || 0.8;
-            intent = response.data.conversationResponse?.intent || '';
-          } 
-          // Fallback to simple response
-          else if (response.data.conversationResponse) {
-            displayMessage = response.data.conversationResponse.message;
-            confidence = response.data.conversationResponse.confidence;
-            intent = response.data.conversationResponse.intent || '';
-          }
-          // Legacy fallback
-          else {
-            displayMessage = response.data.message || 'No response received';
-            confidence = response.data.confidence || 0.8;
-            intent = response.data.intent || '';
-          }
-
+        // Agent response format is much simpler
+        if (response.message) {
           const assistantMessage: ChatMessage = {
             id: 'assistant-' + Date.now(),
             sender: 'assistant',
-            message: displayMessage,
+            message: response.message,
             timestamp: new Date(),
-            confidence: confidence,
-            intent: intent
+            confidence: 0.9  // High confidence for agent responses
           };
           this.messages.push(assistantMessage);
+
+          // Check if confirmation is required
+          if (response.requiresConfirmation && response.conversationId) {
+            this.pendingConfirmation = {
+              conversationId: response.conversationId,
+              requiresConfirmation: response.requiresConfirmation
+            };
+          }
         } else {
           this.addErrorMessage('Failed to get response from AI assistant.');
         }
@@ -148,8 +142,46 @@ export class ChatComponent implements OnInit, AfterViewChecked {
 
   resetChat(): void {
     this.messages = [];
+    this.pendingConfirmation = null;
     this.chatService.resetSession();
     this.addWelcomeMessage();
+  }
+
+  private isConfirmationResponse(message: string): boolean {
+    const lowerMessage = message.toLowerCase().trim();
+    return lowerMessage === 'yes' || lowerMessage === 'y' || 
+           lowerMessage === 'no' || lowerMessage === 'n' ||
+           lowerMessage === 'confirm' || lowerMessage === 'cancel';
+  }
+
+  private handleConfirmation(message: string): void {
+    if (!this.pendingConfirmation) return;
+
+    const isConfirmed = ['yes', 'y', 'confirm'].includes(message.toLowerCase().trim());
+    
+    this.chatService.sendConfirmation(this.pendingConfirmation.conversationId, isConfirmed).subscribe({
+      next: (response: any) => {
+        this.isTyping = false;
+        this.pendingConfirmation = null;
+        
+        if (response.message) {
+          const assistantMessage: ChatMessage = {
+            id: 'assistant-' + Date.now(),
+            sender: 'assistant',
+            message: response.message,
+            timestamp: new Date(),
+            confidence: 0.9
+          };
+          this.messages.push(assistantMessage);
+        }
+      },
+      error: (error: any) => {
+        this.isTyping = false;
+        this.pendingConfirmation = null;
+        console.error('Confirmation error:', error);
+        this.addErrorMessage('Sorry, I encountered an error processing your confirmation. Please try again.');
+      }
+    });
   }
 
   private addErrorMessage(message: string): void {

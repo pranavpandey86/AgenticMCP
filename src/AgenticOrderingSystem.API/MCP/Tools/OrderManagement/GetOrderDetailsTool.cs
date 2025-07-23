@@ -1,5 +1,6 @@
 using AgenticOrderingSystem.API.MCP.Tools.Base;
 using AgenticOrderingSystem.API.MCP.Models;
+using AgenticOrderingSystem.API.MCP.Interfaces;
 using AgenticOrderingSystem.API.Services;
 using AgenticOrderingSystem.API.Models;
 using System.Text.Json;
@@ -10,7 +11,7 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
     /// <summary>
     /// Tool for retrieving complete order details with context
     /// </summary>
-    public class GetOrderDetailsTool : BaseMCPTool
+    public class GetOrderDetailsTool : BaseMCPTool, IAgentTool
     {
         private readonly IOrderService _orderService;
         private readonly IUserService _userService;
@@ -325,6 +326,63 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
             
             [JsonPropertyName("includeUserDetails")]
             public bool? IncludeUserDetails { get; set; }
+        }
+
+        // Implement IAgentTool interface
+        string IAgentTool.Name => "get_order_details";
+        string IAgentTool.Description => "Retrieve complete order information using either Order ID (GUID) or Order Number (e.g., TEAM-SUCCESS-001). Includes workflow details, approval history, and AI recommendations";
+
+        async Task<AgentToolResult> IAgentTool.ExecuteAsync(AgentToolContext context)
+        {
+            try
+            {
+                var parameters = new Dictionary<string, object>();
+                
+                if (context.Parameters.ContainsKey("orderId"))
+                    parameters["orderId"] = context.Parameters["orderId"];
+                if (context.Parameters.ContainsKey("includeHistory"))
+                    parameters["includeHistory"] = context.Parameters["includeHistory"];
+                if (context.Parameters.ContainsKey("includeApprovals"))
+                    parameters["includeApprovals"] = context.Parameters["includeApprovals"];
+                if (context.Parameters.ContainsKey("includeUserDetails"))
+                    parameters["includeUserDetails"] = context.Parameters["includeUserDetails"];
+
+                var mcpResult = await ExecuteAsync(parameters);
+
+                if (!mcpResult.Success)
+                {
+                    return new AgentToolResult
+                    {
+                        Success = false,
+                        Error = mcpResult.Error?.Message ?? "Unknown error",
+                        Output = "Failed to retrieve order details"
+                    };
+                }
+
+                // Properly serialize the data to ensure it can be cast to Dictionary<string, object>
+                var jsonData = JsonSerializer.Serialize(mcpResult.Data);
+                var deserializedData = JsonSerializer.Deserialize<Dictionary<string, object>>(jsonData, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+                return new AgentToolResult
+                {
+                    Success = mcpResult.Success,
+                    Output = "Order details retrieved successfully",
+                    Data = deserializedData ?? new Dictionary<string, object>()
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error executing GetOrderDetailsTool in agent context");
+                return new AgentToolResult
+                {
+                    Success = false,
+                    Error = ex.Message,
+                    Output = "Failed to retrieve order details"
+                };
+            }
         }
     }
 }

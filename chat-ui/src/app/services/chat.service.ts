@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { tap } from 'rxjs/operators';
 
 export interface ChatMessage {
   id: string;
@@ -17,8 +18,15 @@ export interface ConversationRequest {
 }
 
 export interface ConversationResponse {
-  success: boolean;
+  success?: boolean;  // For legacy compatibility
+  message: string;
+  conversationId: string;
+  requiresConfirmation: boolean;
   data: {
+    analysis?: any;
+    can_update?: boolean;
+    suggested_values?: any;
+    // Legacy MCP fields for fallback
     conversationResponse?: {
       message: string;
       toolCalls?: any[];
@@ -45,12 +53,11 @@ export interface ConversationResponse {
       failedTools: number;
     };
     // Fallback for simple responses
-    message?: string;
     confidence?: number;
     intent?: string;
     metadata?: any;
   };
-  message: string;
+  timestamp: string;
 }
 
 export interface ToolResult {
@@ -89,6 +96,7 @@ export interface MCPHealthResponse {
 export class ChatService {
   private readonly apiUrl = 'http://localhost:5001/api';
   private currentSessionId: string;
+  private currentConversationId: string | null = null;
 
   constructor(private http: HttpClient) {
     this.currentSessionId = this.generateSessionId();
@@ -114,13 +122,36 @@ export class ChatService {
 
   // Send a message to the AI assistant
   sendMessage(message: string): Observable<ConversationResponse> {
-    const request: ConversationRequest = {
-      sessionId: this.currentSessionId,
-      message: message
+    const request = {
+      message: message,
+      conversationId: this.currentConversationId,  // null for first message
+      userId: "demo-user-001"
     };
 
     return this.http.post<ConversationResponse>(
-      `${this.apiUrl}/mcp/ai/conversation`, 
+      `${this.apiUrl}/agent/chat`, 
+      request, 
+      this.getHttpOptions()
+    ).pipe(
+      tap((response: ConversationResponse) => {
+        // Store the conversation ID for subsequent messages
+        if (response.conversationId) {
+          this.currentConversationId = response.conversationId;
+        }
+      })
+    );
+  }
+
+  // Send a confirmation response to the agent
+  sendConfirmation(conversationId: string, confirmed: boolean): Observable<ConversationResponse> {
+    const request = {
+      conversationId: conversationId,
+      confirmed: confirmed,
+      userId: "demo-user-001"
+    };
+
+    return this.http.post<ConversationResponse>(
+      `${this.apiUrl}/agent/confirm`, 
       request, 
       this.getHttpOptions()
     );
@@ -148,6 +179,7 @@ export class ChatService {
   // Reset the conversation session
   resetSession(): void {
     this.currentSessionId = this.generateSessionId();
+    this.currentConversationId = null;
   }
 
   // Get the current session ID

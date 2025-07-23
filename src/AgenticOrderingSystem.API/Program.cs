@@ -46,10 +46,19 @@ builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<AgenticOrderingSystem.API.MCP.Interfaces.IMCPOrchestrator, AgenticOrderingSystem.API.MCP.Services.MCPOrchestrator>();
 builder.Services.AddScoped<AgenticOrderingSystem.API.MCP.Interfaces.IPerplexityAIService, AgenticOrderingSystem.API.MCP.Services.PerplexityAIService>();
 
+// Register Agent Services
+builder.Services.AddSingleton<IConversationStateService, ConversationStateService>();
+builder.Services.AddScoped<IAgentOrchestratorService, AgentOrchestratorService>();
+
 // Register MCP Tools
 builder.Services.AddScoped<AgenticOrderingSystem.API.MCP.Tools.OrderManagement.GetUserOrdersTool>();
 builder.Services.AddScoped<AgenticOrderingSystem.API.MCP.Tools.OrderManagement.GetOrderDetailsTool>();
 builder.Services.AddScoped<AgenticOrderingSystem.API.MCP.Tools.OrderManagement.AnalyzeOrderFailuresTool>();
+
+// Register Agent Tools (implementing IAgentTool interface)
+builder.Services.AddScoped<AgenticOrderingSystem.API.MCP.Interfaces.IAgentTool, AgenticOrderingSystem.API.MCP.Tools.OrderManagement.GetOrderDetailsTool>();
+builder.Services.AddScoped<AgenticOrderingSystem.API.MCP.Interfaces.IAgentTool, AgenticOrderingSystem.API.MCP.Tools.OrderManagement.AnalyzeOrderFailuresTool>();
+builder.Services.AddScoped<AgenticOrderingSystem.API.MCP.Interfaces.IAgentTool, AgenticOrderingSystem.API.MCP.Tools.OrderManagement.UpdateOrderAgentTool>();
 
 // Add HTTP Client for AI services
 builder.Services.AddHttpClient<AgenticOrderingSystem.API.MCP.Services.PerplexityAIService>();
