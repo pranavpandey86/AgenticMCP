@@ -90,7 +90,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpGet("validate")]
-    public async Task<ActionResult> ValidateToken()
+    public ActionResult ValidateToken()
     {
         var userId = HttpContext.Items["UserId"]?.ToString();
         if (string.IsNullOrEmpty(userId))

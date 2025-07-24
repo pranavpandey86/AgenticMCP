@@ -585,18 +585,18 @@ EXTRACT ORDER ID AND DETERMINE ACTION, RESPOND WITH JSON:";
                     response += $"User: {userName}\n";
                     response += $"Product: {productName}\n";
                     response += $"Amount: {currency} {amount}\n";
-                    response += $"Status: {status.ToUpper()}\n";
+                    response += $"Status: {status?.ToUpper() ?? "UNKNOWN"}\n";
                     response += $"Justification: {businessJustification}\n\n";
                     
-                    if (status.ToLower() == "rejected" && orderData.ContainsKey("workflowAnalysis"))
+                    if (status?.ToLower() == "rejected" && orderData.ContainsKey("workflowAnalysis"))
                     {
                         response += "This order was rejected. Would you like me to analyze why it was rejected and suggest fixes?";
                     }
-                    else if (status.ToLower() == "approved")
+                    else if (status?.ToLower() == "approved")
                     {
                         response += "This order has been approved and is ready for fulfillment!";
                     }
-                    else if (status.ToLower() == "pending")
+                    else if (status?.ToLower() == "pending")
                     {
                         response += "This order is pending approval.";
                     }
@@ -759,7 +759,7 @@ EXTRACT ORDER ID AND DETERMINE ACTION, RESPOND WITH JSON:";
             .Trim() ?? "";
     }
 
-    private async Task<AgentResponse> HandleGeneralHelp(string userId, string message, ConversationState conversation)
+    private AgentResponse HandleGeneralHelp(string userId, string message, ConversationState conversation)
     {
         var helpMessage = @"I'm your AI ordering assistant! I can help you with:
 

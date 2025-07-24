@@ -107,7 +107,7 @@ public class AuthenticationService : IAuthenticationService
         }
     }
 
-    public async Task<string?> GetUserIdFromTokenAsync(string token)
+    public string? GetUserIdFromToken(string token)
     {
         try
         {

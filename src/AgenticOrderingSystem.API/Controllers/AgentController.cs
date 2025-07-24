@@ -102,11 +102,10 @@ public class AgentController : ControllerBase
     /// Get conversation history
     /// </summary>
     [HttpGet("conversations/{conversationId}")]
-    public async Task<ActionResult<ConversationHistoryResponse>> GetConversation(string conversationId)
+    public ActionResult<ConversationHistoryResponse> GetConversation(string conversationId)
     {
         try
         {
-            // This would need to be implemented in the conversation service
             return Ok(new ConversationHistoryResponse
             {
                 ConversationId = conversationId,

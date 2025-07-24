@@ -5,12 +5,10 @@ namespace AgenticOrderingSystem.API.Middleware;
 public class AuthenticationMiddleware
 {
     private readonly RequestDelegate _next;
-    private readonly ILogger<AuthenticationMiddleware> _logger;
 
     public AuthenticationMiddleware(RequestDelegate next, ILogger<AuthenticationMiddleware> logger)
     {
         _next = next;
-        _logger = logger;
     }
 
     public async Task InvokeAsync(HttpContext context, IAuthenticationService authService, IAuditService auditService)
@@ -42,7 +40,7 @@ public class AuthenticationMiddleware
             return;
         }
 
-        var userId = await authService.GetUserIdFromTokenAsync(token);
+        var userId = authService.GetUserIdFromToken(token);
         if (string.IsNullOrEmpty(userId))
         {
             context.Response.StatusCode = 401;

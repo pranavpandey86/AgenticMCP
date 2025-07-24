@@ -323,7 +323,7 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
             return false;
         }
 
-        private class GetOrderDetailsParams
+        private sealed class GetOrderDetailsParams
         {
             [JsonPropertyName("orderId")]
             public string OrderId { get; set; } = string.Empty;

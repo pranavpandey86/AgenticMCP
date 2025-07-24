@@ -1,6 +1,7 @@
 using DotNetEnv;
 using AgenticOrderingSystem.API.Configuration;
 using AgenticOrderingSystem.API.Services;
+using Microsoft.OpenApi.Models;
 
 // Load environment variables from .env file in the root directory
 var envPath = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", ".env");

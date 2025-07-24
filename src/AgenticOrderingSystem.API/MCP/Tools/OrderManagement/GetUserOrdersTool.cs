@@ -208,7 +208,7 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
             }
         }
 
-        private class GetUserOrdersParams
+        private sealed class GetUserOrdersParams
         {
             [JsonPropertyName("userId")]
             public string UserId { get; set; } = string.Empty;
@@ -232,7 +232,7 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
             public bool? IncludeHistory { get; set; }
         }
 
-        private class DateRangeFilter
+        private sealed class DateRangeFilter
         {
             public DateTime? Start { get; set; }
             public DateTime? End { get; set; }
@@ -241,7 +241,7 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
         /// <summary>
         /// Custom JSON converter that handles both string and List<string> for the status parameter
         /// </summary>
-        private class FlexibleStringListConverter : JsonConverter<List<string>?>
+        private sealed class FlexibleStringListConverter : JsonConverter<List<string>?>
         {
             public override List<string>? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
             {
