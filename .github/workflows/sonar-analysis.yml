@@ -51,12 +51,24 @@ jobs:
           mkdir -p ./.sonar/scanner
           dotnet tool update dotnet-sonarscanner --tool-path ./.sonar/scanner
       
+      - name: Restore dependencies
+        run: |
+          cd src/AgenticOrderingSystem.API
+          dotnet restore AgenticOrderingSystem.API.csproj
+      
       - name: Build and analyze
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           cd src/AgenticOrderingSystem.API
-          ../../.sonar/scanner/dotnet-sonarscanner begin /k:"pranavpandey86_AgenticMCP" /o:"pranavpandey86" /d:sonar.token="${{ secrets.SONAR_TOKEN }}" /d:sonar.host.url="https://sonarcloud.io"
-          dotnet build --configuration Release
+          ../../.sonar/scanner/dotnet-sonarscanner begin \
+            /k:"pranavpandey86_AgenticMCP" \
+            /o:"pranavpandey86" \
+            /d:sonar.token="${{ secrets.SONAR_TOKEN }}" \
+            /d:sonar.host.url="https://sonarcloud.io" \
+            /d:sonar.exclusions="**/bin/**,**/obj/**,Tests/**,**/Tests/**"
+          
+          dotnet build AgenticOrderingSystem.API.csproj --configuration Release --no-restore
+          
           ../../.sonar/scanner/dotnet-sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
