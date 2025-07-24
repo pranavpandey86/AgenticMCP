@@ -42,26 +42,35 @@ public class UpdateOrderAgentTool : IAgentTool
             var orderId = context.Parameters["orderId"].ToString()!;
             var suggestedValues = context.Parameters.GetValueOrDefault("suggested_values", new Dictionary<string, object>()) as Dictionary<string, object>;
 
-            // Get the existing order
+            // Get the existing order - try by ID first, then by order number
             var existingOrder = await _orderService.GetOrderByIdAsync(orderId);
+            if (existingOrder == null)
+            {
+                // Try by order number as fallback
+                existingOrder = await _orderService.GetOrderByNumberAsync(orderId);
+            }
+            
             if (existingOrder == null)
             {
                 return new AgentToolResult
                 {
                     Success = false,
                     Error = "Order not found",
-                    Output = $"Order with ID {orderId} was not found"
+                    Output = $"Order with ID or number '{orderId}' was not found"
                 };
             }
 
             // Verify user authorization (order owner)
+            _logger.LogInformation("Authorization check: Order RequesterId = '{OrderRequesterId}', Context UserId = '{ContextUserId}'", 
+                existingOrder.RequesterId, context.UserId);
+            
             if (existingOrder.RequesterId != context.UserId)
             {
                 return new AgentToolResult
                 {
                     Success = false,
                     Error = "Unauthorized",
-                    Output = "You can only update your own orders"
+                    Output = $"You can only update your own orders. Order belongs to '{existingOrder.RequesterId}' but request is from '{context.UserId}'"
                 };
             }
 

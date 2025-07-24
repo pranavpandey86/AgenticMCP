@@ -33,9 +33,12 @@ public class AgentController : ControllerBase
                 return BadRequest("Message cannot be empty");
             }
 
-            // For demo purposes, using a hardcoded user ID
-            // In a real app, extract from authentication context
-            var userId = request.UserId ?? "demo-user-001";
+            // Get user ID from header or request body or use default
+            var userId = Request.Headers["x-user-id"].FirstOrDefault() 
+                        ?? request.UserId 
+                        ?? "demo-user-001";
+
+            _logger.LogInformation("Chat request from userId: {UserId}", userId);
 
             var response = await _agentService.HandleChatMessageAsync(userId, request.Message, request.ConversationId);
 
@@ -68,8 +71,12 @@ public class AgentController : ControllerBase
                 return BadRequest("ConversationId is required");
             }
 
-            // For demo purposes, using a hardcoded user ID
-            var userId = request.UserId ?? "demo-user-001";
+            // Get user ID from header or request body or use default
+            var userId = Request.Headers["x-user-id"].FirstOrDefault() 
+                        ?? request.UserId 
+                        ?? "demo-user-001";
+
+            _logger.LogInformation("Confirmation request from userId: {UserId}", userId);
 
             var response = await _agentService.HandleConfirmationAsync(userId, request.ConversationId, request.Confirmed);
 
