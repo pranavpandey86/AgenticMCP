@@ -97,13 +97,54 @@ export class ChatService {
   private readonly apiUrl = 'http://localhost:5001/api';
   private currentSessionId: string;
   private currentConversationId: string | null = null;
+  private currentToken: string | null = null;
 
   constructor(private http: HttpClient) {
     this.currentSessionId = this.generateSessionId();
+    this.currentToken = localStorage.getItem('auth_token');
   }
 
   private generateSessionId(): string {
     return `chat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  login(email: string, password: string): Observable<LoginResponse> {
+    const request: LoginRequest = { email, password };
+    return this.http.post<LoginResponse>(`${this.apiUrl}/auth/login`, request, this.getHttpOptions())
+      .pipe(
+        tap((response: LoginResponse) => {
+          if (response.success) {
+            this.currentToken = response.token;
+            localStorage.setItem('auth_token', response.token);
+            localStorage.setItem('user_id', response.userId);
+            localStorage.setItem('user_name', response.fullName);
+          }
+        })
+      );
+  }
+
+  logout(): Observable<any> {
+    return this.http.post(`${this.apiUrl}/auth/logout`, {}, this.getAuthenticatedHttpOptions())
+      .pipe(
+        tap(() => {
+          this.currentToken = null;
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('user_id');
+          localStorage.removeItem('user_name');
+        })
+      );
+  }
+
+  isAuthenticated(): boolean {
+    return this.currentToken !== null;
+  }
+
+  getCurrentUserId(): string | null {
+    return localStorage.getItem('user_id');
+  }
+
+  getCurrentUserName(): string | null {
+    return localStorage.getItem('user_name');
   }
 
   private getHttpOptions() {
@@ -113,6 +154,19 @@ export class ChatService {
         'Accept': 'application/json'
       })
     };
+  }
+
+  private getAuthenticatedHttpOptions() {
+    const headers: any = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    };
+    
+    if (this.currentToken) {
+      headers['Authorization'] = `Bearer ${this.currentToken}`;
+    }
+    
+    return { headers: new HttpHeaders(headers) };
   }
 
   // Check if the MCP server is healthy
@@ -146,14 +200,13 @@ export class ChatService {
   sendConfirmation(conversationId: string, confirmed: boolean): Observable<ConversationResponse> {
     const request = {
       conversationId: conversationId,
-      confirmed: confirmed,
-      userId: "mkt_david_designer"  // Use the test user who owns TEAM-FAIL-001
+      confirmed: confirmed
     };
 
     return this.http.post<ConversationResponse>(
       `${this.apiUrl}/agent/confirm`, 
       request, 
-      this.getHttpOptions()
+      this.getAuthenticatedHttpOptions()
     );
   }
 

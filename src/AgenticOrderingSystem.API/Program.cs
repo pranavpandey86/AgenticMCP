@@ -50,6 +50,10 @@ builder.Services.AddScoped<AgenticOrderingSystem.API.MCP.Interfaces.IPerplexityA
 builder.Services.AddSingleton<IConversationStateService, ConversationStateService>();
 builder.Services.AddScoped<IAgentOrchestratorService, AgentOrchestratorService>();
 
+// Register Authentication Services
+builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
+builder.Services.AddScoped<IAuditService, AuditService>();
+
 // Register MCP Tools
 builder.Services.AddScoped<AgenticOrderingSystem.API.MCP.Tools.OrderManagement.GetUserOrdersTool>();
 builder.Services.AddScoped<AgenticOrderingSystem.API.MCP.Tools.OrderManagement.GetOrderDetailsTool>();
@@ -89,6 +93,8 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
     app.UseCors("DevelopmentPolicy");
 }
+
+app.UseMiddleware<AgenticOrderingSystem.API.Middleware.AuthenticationMiddleware>();
 
 app.UseAuthorization();
 

@@ -56,6 +56,11 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
 
         protected override async Task<ToolResult> ExecuteInternalAsync(object parameters, CancellationToken cancellationToken)
         {
+            return await ExecuteInternalAsync(parameters, cancellationToken, null);
+        }
+
+        private async Task<ToolResult> ExecuteInternalAsync(object parameters, CancellationToken cancellationToken, AgentToolContext? context)
+        {
             try
             {
                 var json = JsonSerializer.Serialize(parameters);
@@ -66,7 +71,7 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
                 var toolParams = JsonSerializer.Deserialize<AnalyzeOrderFailuresParams>(json, options) ?? new AnalyzeOrderFailuresParams();
 
                 // Step 1: Gather data for AI analysis
-                var analysisData = await GatherOrderAnalysisDataAsync(toolParams);
+                var analysisData = await GatherOrderAnalysisDataAsync(toolParams, context);
                 
                 // Step 2: Send data to Perplexity AI for intelligent analysis
                 var llmAnalysis = await AnalyzeWithPerplexityAIAsync(analysisData);
@@ -85,7 +90,7 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
             }
         }
 
-        private async Task<OrderAnalysisData> GatherOrderAnalysisDataAsync(AnalyzeOrderFailuresParams toolParams)
+        private async Task<OrderAnalysisData> GatherOrderAnalysisDataAsync(AnalyzeOrderFailuresParams toolParams, AgentToolContext? context = null)
         {
             var analysisData = new OrderAnalysisData();
             
@@ -97,6 +102,12 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
                 {
                     targetOrder = await _orderService.GetOrderByNumberAsync(toolParams.OrderId);
                 }
+                
+                if (targetOrder != null && targetOrder.RequesterId != context?.UserId)
+                {
+                    return ToolResult.CreateError("UNAUTHORIZED", "You can only analyze your own orders");
+                }
+                
                 analysisData.TargetOrder = targetOrder;
             }
 
@@ -328,7 +339,7 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
                 if (context.Parameters.ContainsKey("userId"))
                     parameters["userId"] = context.Parameters["userId"];
 
-                var mcpResult = await ExecuteAsync(parameters);
+                var mcpResult = await ExecuteInternalAsync(parameters, CancellationToken.None, context);
                 
                 _logger.LogInformation("MCP result success: {Success}, Data type: {DataType}, Data: {Data}", 
                     mcpResult.Success, 

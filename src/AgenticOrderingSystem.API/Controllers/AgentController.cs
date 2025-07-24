@@ -33,12 +33,13 @@ public class AgentController : ControllerBase
                 return BadRequest("Message cannot be empty");
             }
 
-            // Get user ID from header or request body or use default
-            var userId = Request.Headers["x-user-id"].FirstOrDefault() 
-                        ?? request.UserId 
-                        ?? "demo-user-001";
+            var userId = HttpContext.Items["UserId"]?.ToString();
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized("Authentication required");
+            }
 
-            _logger.LogInformation("Chat request from userId: {UserId}", userId);
+            _logger.LogInformation("Chat request from authenticated userId: {UserId}", userId);
 
             var response = await _agentService.HandleChatMessageAsync(userId, request.Message, request.ConversationId);
 
@@ -71,12 +72,13 @@ public class AgentController : ControllerBase
                 return BadRequest("ConversationId is required");
             }
 
-            // Get user ID from header or request body or use default
-            var userId = Request.Headers["x-user-id"].FirstOrDefault() 
-                        ?? request.UserId 
-                        ?? "demo-user-001";
+            var userId = HttpContext.Items["UserId"]?.ToString();
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized("Authentication required");
+            }
 
-            _logger.LogInformation("Confirmation request from userId: {UserId}", userId);
+            _logger.LogInformation("Confirmation request from authenticated userId: {UserId}", userId);
 
             var response = await _agentService.HandleConfirmationAsync(userId, request.ConversationId, request.Confirmed);
 
