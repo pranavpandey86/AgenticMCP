@@ -1,6 +1,7 @@
 using DotNetEnv;
 using AgenticOrderingSystem.API.Configuration;
 using AgenticOrderingSystem.API.Services;
+using Microsoft.OpenApi.Models;
 
 // Load environment variables from .env file in the root directory
 var envPath = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", ".env");
@@ -50,6 +51,10 @@ builder.Services.AddScoped<AgenticOrderingSystem.API.MCP.Interfaces.IPerplexityA
 builder.Services.AddSingleton<IConversationStateService, ConversationStateService>();
 builder.Services.AddScoped<IAgentOrchestratorService, AgentOrchestratorService>();
 
+// Register Authentication Services
+builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
+builder.Services.AddScoped<IAuditService, AuditService>();
+
 // Register MCP Tools
 builder.Services.AddScoped<AgenticOrderingSystem.API.MCP.Tools.OrderManagement.GetUserOrdersTool>();
 builder.Services.AddScoped<AgenticOrderingSystem.API.MCP.Tools.OrderManagement.GetOrderDetailsTool>();
@@ -65,8 +70,8 @@ builder.Services.AddHttpClient<AgenticOrderingSystem.API.MCP.Services.Perplexity
 
 // Add services to the container.
 builder.Services.AddControllers();
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
 // Add CORS for development
 builder.Services.AddCors(options =>
@@ -86,9 +91,12 @@ var app = builder.Build();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI();
     app.UseCors("DevelopmentPolicy");
 }
+
+app.UseMiddleware<AgenticOrderingSystem.API.Middleware.AuthenticationMiddleware>();
 
 app.UseAuthorization();
 

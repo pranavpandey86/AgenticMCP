@@ -1,5 +1,6 @@
 using AgenticOrderingSystem.API.MCP.Tools.Base;
 using AgenticOrderingSystem.API.MCP.Models;
+using AgenticOrderingSystem.API.MCP.Interfaces;
 using AgenticOrderingSystem.API.Services;
 using AgenticOrderingSystem.API.Models;
 using System.Text.Json;
@@ -10,7 +11,7 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
     /// <summary>
     /// Tool for retrieving user orders with advanced filtering
     /// </summary>
-    public class GetUserOrdersTool : BaseMCPTool
+    public class GetUserOrdersTool : BaseMCPTool, IAgentTool
     {
         private readonly IOrderService _orderService;
         private readonly IUserService _userService;
@@ -86,6 +87,11 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
 
         protected override async Task<ToolResult> ExecuteInternalAsync(object parameters, CancellationToken cancellationToken)
         {
+            return await ExecuteInternalAsync(parameters, cancellationToken, null);
+        }
+
+        private async Task<ToolResult> ExecuteInternalAsync(object parameters, CancellationToken cancellationToken, AgentToolContext? context)
+        {
             try
             {
                 var json = JsonSerializer.Serialize(parameters);
@@ -99,6 +105,11 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
                 if (toolParams == null || string.IsNullOrEmpty(toolParams.UserId))
                 {
                     return ToolResult.CreateError("INVALID_PARAMETERS", "UserId is required");
+                }
+
+                if (toolParams.UserId != context?.UserId)
+                {
+                    return ToolResult.CreateError("UNAUTHORIZED", "You can only access your own orders");
                 }
 
                 // Verify user exists
@@ -197,7 +208,7 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
             }
         }
 
-        private class GetUserOrdersParams
+        private sealed class GetUserOrdersParams
         {
             [JsonPropertyName("userId")]
             public string UserId { get; set; } = string.Empty;
@@ -221,7 +232,7 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
             public bool? IncludeHistory { get; set; }
         }
 
-        private class DateRangeFilter
+        private sealed class DateRangeFilter
         {
             public DateTime? Start { get; set; }
             public DateTime? End { get; set; }
@@ -230,7 +241,7 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
         /// <summary>
         /// Custom JSON converter that handles both string and List<string> for the status parameter
         /// </summary>
-        private class FlexibleStringListConverter : JsonConverter<List<string>?>
+        private sealed class FlexibleStringListConverter : JsonConverter<List<string>?>
         {
             public override List<string>? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
             {
@@ -276,6 +287,69 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
                     }
                     writer.WriteEndArray();
                 }
+            }
+        }
+
+        // Implement IAgentTool interface
+        string IAgentTool.Name => "get_user_orders";
+        string IAgentTool.Description => "Retrieve user orders with advanced filtering capabilities including status, date range, and product category filters";
+
+        async Task<AgentToolResult> IAgentTool.ExecuteAsync(AgentToolContext context)
+        {
+            try
+            {
+                var parameters = new Dictionary<string, object>();
+                
+                if (context.Parameters.ContainsKey("userId"))
+                    parameters["userId"] = context.Parameters["userId"];
+                if (context.Parameters.ContainsKey("status"))
+                    parameters["status"] = context.Parameters["status"];
+                if (context.Parameters.ContainsKey("dateRange"))
+                    parameters["dateRange"] = context.Parameters["dateRange"];
+                if (context.Parameters.ContainsKey("productCategory"))
+                    parameters["productCategory"] = context.Parameters["productCategory"];
+                if (context.Parameters.ContainsKey("limit"))
+                    parameters["limit"] = context.Parameters["limit"];
+                if (context.Parameters.ContainsKey("offset"))
+                    parameters["offset"] = context.Parameters["offset"];
+                if (context.Parameters.ContainsKey("includeHistory"))
+                    parameters["includeHistory"] = context.Parameters["includeHistory"];
+
+                var mcpResult = await ExecuteInternalAsync(parameters, CancellationToken.None, context);
+
+                if (!mcpResult.Success)
+                {
+                    return new AgentToolResult
+                    {
+                        Success = false,
+                        Error = mcpResult.Error?.Message ?? "Unknown error",
+                        Output = "Failed to retrieve user orders"
+                    };
+                }
+
+                // Properly serialize the data to ensure it can be cast to Dictionary<string, object>
+                var jsonData = JsonSerializer.Serialize(mcpResult.Data);
+                var deserializedData = JsonSerializer.Deserialize<Dictionary<string, object>>(jsonData, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+                return new AgentToolResult
+                {
+                    Success = mcpResult.Success,
+                    Output = "User orders retrieved successfully",
+                    Data = deserializedData ?? new Dictionary<string, object>()
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error executing GetUserOrdersTool in agent context");
+                return new AgentToolResult
+                {
+                    Success = false,
+                    Error = ex.Message,
+                    Output = "Failed to retrieve user orders"
+                };
             }
         }
     }

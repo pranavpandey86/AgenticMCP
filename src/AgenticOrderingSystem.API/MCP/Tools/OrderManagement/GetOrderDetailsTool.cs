@@ -13,6 +13,12 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
     /// </summary>
     public class GetOrderDetailsTool : BaseMCPTool, IAgentTool
     {
+        private const string ORDER_ID_PARAM = "orderId";
+        private const string INCLUDE_HISTORY_PARAM = "includeHistory";
+        private const string INCLUDE_APPROVALS_PARAM = "includeApprovals";
+        private const string INCLUDE_USER_DETAILS_PARAM = "includeUserDetails";
+        private const string REJECTED_STATUS = "rejected";
+        
         private readonly IOrderService _orderService;
         private readonly IUserService _userService;
 
@@ -32,28 +38,28 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
             Type = "object",
             Properties = new Dictionary<string, ParameterProperty>
             {
-                ["orderId"] = new()
+                [ORDER_ID_PARAM] = new()
                 {
                     Type = "string",
                     Description = "Order ID (GUID) or Order Number (e.g., REJ-2025-07-0001) to retrieve details for",
                     Required = true,
                     MinLength = 1
                 },
-                ["includeHistory"] = new()
+                [INCLUDE_HISTORY_PARAM] = new()
                 {
                     Type = "boolean",
                     Description = "Include complete approval history",
                     Required = false,
                     Default = true
                 },
-                ["includeApprovals"] = new()
+                [INCLUDE_APPROVALS_PARAM] = new()
                 {
                     Type = "boolean",
                     Description = "Include detailed approval workflow information",
                     Required = false,
                     Default = true
                 },
-                ["includeUserDetails"] = new()
+                [INCLUDE_USER_DETAILS_PARAM] = new()
                 {
                     Type = "boolean",
                     Description = "Include detailed user information",
@@ -61,10 +67,15 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
                     Default = false
                 }
             },
-            Required = new List<string> { "orderId" }
+            Required = new List<string> { ORDER_ID_PARAM }
         };
 
         protected override async Task<ToolResult> ExecuteInternalAsync(object parameters, CancellationToken cancellationToken)
+        {
+            return await ExecuteInternalAsync(parameters, cancellationToken, null);
+        }
+
+        private async Task<ToolResult> ExecuteInternalAsync(object parameters, CancellationToken cancellationToken, AgentToolContext? context)
         {
             try
             {
@@ -91,6 +102,11 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
                 if (order == null)
                 {
                     return ToolResult.CreateError("ORDER_NOT_FOUND", $"Order with ID or number '{toolParams.OrderId}' not found");
+                }
+
+                if (order.RequesterId != context?.UserId)
+                {
+                    return ToolResult.CreateError("UNAUTHORIZED", "You can only access your own orders");
                 }
 
                 // Get user details if requested
@@ -198,7 +214,7 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
             // Generate recommendations based on order status
             switch (order.Status.ToLowerInvariant())
             {
-                case "rejected":
+                case REJECTED_STATUS:
                     // Check if this order has rejection details through approval history
                     var rejectionAction = order.ApprovalWorkflow.History.LastOrDefault(h => h.Action == "reject");
                     if (rejectionAction != null)
@@ -313,7 +329,7 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
             return false;
         }
 
-        private class GetOrderDetailsParams
+        private sealed class GetOrderDetailsParams
         {
             [JsonPropertyName("orderId")]
             public string OrderId { get; set; } = string.Empty;
@@ -338,16 +354,16 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
             {
                 var parameters = new Dictionary<string, object>();
                 
-                if (context.Parameters.ContainsKey("orderId"))
-                    parameters["orderId"] = context.Parameters["orderId"];
-                if (context.Parameters.ContainsKey("includeHistory"))
-                    parameters["includeHistory"] = context.Parameters["includeHistory"];
-                if (context.Parameters.ContainsKey("includeApprovals"))
-                    parameters["includeApprovals"] = context.Parameters["includeApprovals"];
-                if (context.Parameters.ContainsKey("includeUserDetails"))
-                    parameters["includeUserDetails"] = context.Parameters["includeUserDetails"];
+                if (context.Parameters.ContainsKey(ORDER_ID_PARAM))
+                    parameters[ORDER_ID_PARAM] = context.Parameters[ORDER_ID_PARAM];
+                if (context.Parameters.ContainsKey(INCLUDE_HISTORY_PARAM))
+                    parameters[INCLUDE_HISTORY_PARAM] = context.Parameters[INCLUDE_HISTORY_PARAM];
+                if (context.Parameters.ContainsKey(INCLUDE_APPROVALS_PARAM))
+                    parameters[INCLUDE_APPROVALS_PARAM] = context.Parameters[INCLUDE_APPROVALS_PARAM];
+                if (context.Parameters.ContainsKey(INCLUDE_USER_DETAILS_PARAM))
+                    parameters[INCLUDE_USER_DETAILS_PARAM] = context.Parameters[INCLUDE_USER_DETAILS_PARAM];
 
-                var mcpResult = await ExecuteAsync(parameters);
+                var mcpResult = await ExecuteInternalAsync(parameters, CancellationToken.None, context);
 
                 if (!mcpResult.Success)
                 {

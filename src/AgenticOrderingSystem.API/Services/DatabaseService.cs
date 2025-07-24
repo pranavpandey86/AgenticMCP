@@ -17,6 +17,8 @@ public interface IDatabaseService
     IMongoCollection<User> Users { get; }
     IMongoCollection<Order> Orders { get; }
     IMongoCollection<AIAgentSession> AIAgentSessions { get; }
+    IMongoCollection<UserSession> UserSessions { get; }
+    IMongoCollection<AuditLog> AuditLogs { get; }
 
     // Health check
     Task<bool> TestConnectionAsync();
@@ -67,6 +69,12 @@ public class DatabaseService : IDatabaseService
 
     public IMongoCollection<AIAgentSession> AIAgentSessions => 
         _cmpDatabase.GetCollection<AIAgentSession>(CollectionNames.AIAgentSessions);
+
+    public IMongoCollection<UserSession> UserSessions => 
+        _cmpDatabase.GetCollection<UserSession>("userSessions");
+
+    public IMongoCollection<AuditLog> AuditLogs => 
+        _cmpDatabase.GetCollection<AuditLog>("auditLogs");
 
     /// <summary>
     /// Test database connectivity
