@@ -24,10 +24,13 @@ public class TeamBasedOrderSeeder
         {
             _logger.LogInformation("Starting team-based order seeding...");
 
-            // First, create team structure with managers and team members
+            // First, ensure products are seeded (required for orders)
+            await SeedRequiredProductsAsync();
+            
+            // Then, create team structure with managers and team members
             await SeedTeamStructureAsync();
             
-            // Then create realistic order scenarios
+            // Finally, create realistic order scenarios
             await SeedTeamOrderPatternsAsync();
 
             _logger.LogInformation("Team-based order seeding completed successfully");
@@ -350,5 +353,100 @@ public class TeamBasedOrderSeeder
                 }
             }
         };
+    }
+
+    private async Task SeedRequiredProductsAsync()
+    {
+        _logger.LogInformation("📦 Seeding required products for team orders...");
+
+        var productCollection = _databaseService.Products;
+        
+        var existingAdobeProducts = await productCollection.Find(p => 
+            p.Id == "adobe-cc-2023" || p.Id == "adobe-cc-2024").ToListAsync();
+        
+        if (existingAdobeProducts.Count >= 2)
+        {
+            _logger.LogInformation("✅ Required Adobe products already exist in database");
+            return;
+        }
+
+        var requiredProducts = new List<Product>
+        {
+            new Product
+            {
+                Id = "adobe-cc-2023",
+                Name = "Adobe Creative Cloud 2023",
+                Description = "Adobe Creative Cloud 2023 suite (discontinued version)",
+                Category = "software",
+                Price = 45.99m,
+                Currency = "USD",
+                IsActive = false,
+                ApprovalModel = new ApprovalModel
+                {
+                    Level1 = new ApprovalLevel
+                    {
+                        Required = true,
+                        ApproverType = "manager",
+                        TimeoutHours = 48,
+                        TriggerConditions = new TriggerConditions
+                        {
+                            MinAmount = 45.99m,
+                            MaxAmount = 10000
+                        }
+                    }
+                },
+                Questions = new List<ProductQuestion>(),
+                Metadata = new ProductMetadata
+                {
+                    Vendor = "Adobe Inc.",
+                    BusinessUnit = "Design & Marketing",
+                    Tags = new List<string> { "design", "creative", "discontinued", "software" },
+                    EstimatedCost = 45.99m,
+                    Currency = "USD"
+                }
+            },
+            new Product
+            {
+                Id = "adobe-cc-2024",
+                Name = "Adobe Creative Cloud 2024",
+                Description = "Adobe Creative Cloud 2024 suite (current version)",
+                Category = "software",
+                Price = 52.99m,
+                Currency = "USD",
+                IsActive = true,
+                ApprovalModel = new ApprovalModel
+                {
+                    Level1 = new ApprovalLevel
+                    {
+                        Required = true,
+                        ApproverType = "manager",
+                        TimeoutHours = 48,
+                        TriggerConditions = new TriggerConditions
+                        {
+                            MinAmount = 52.99m,
+                            MaxAmount = 10000
+                        }
+                    }
+                },
+                Questions = new List<ProductQuestion>(),
+                Metadata = new ProductMetadata
+                {
+                    Vendor = "Adobe Inc.",
+                    BusinessUnit = "Design & Marketing",
+                    Tags = new List<string> { "design", "creative", "current", "software" },
+                    EstimatedCost = 52.99m,
+                    Currency = "USD"
+                }
+            }
+        };
+
+        var productsToInsert = requiredProducts.Where(p => 
+            !existingAdobeProducts.Any(ep => ep.Id == p.Id)).ToList();
+        
+        if (productsToInsert.Any())
+        {
+            await productCollection.InsertManyAsync(productsToInsert);
+            _logger.LogInformation($"✅ Seeded {productsToInsert.Count} required products for team orders");
+        }
     }
 }
