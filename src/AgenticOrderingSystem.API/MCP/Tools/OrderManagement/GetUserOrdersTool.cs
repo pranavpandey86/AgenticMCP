@@ -1,5 +1,6 @@
 using AgenticOrderingSystem.API.MCP.Tools.Base;
 using AgenticOrderingSystem.API.MCP.Models;
+using AgenticOrderingSystem.API.MCP.Interfaces;
 using AgenticOrderingSystem.API.Services;
 using AgenticOrderingSystem.API.Models;
 using System.Text.Json;
@@ -10,7 +11,7 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
     /// <summary>
     /// Tool for retrieving user orders with advanced filtering
     /// </summary>
-    public class GetUserOrdersTool : BaseMCPTool
+    public class GetUserOrdersTool : BaseMCPTool, IAgentTool
     {
         private readonly IOrderService _orderService;
         private readonly IUserService _userService;
@@ -286,6 +287,69 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
                     }
                     writer.WriteEndArray();
                 }
+            }
+        }
+
+        // Implement IAgentTool interface
+        string IAgentTool.Name => "get_user_orders";
+        string IAgentTool.Description => "Retrieve user orders with advanced filtering capabilities including status, date range, and product category filters";
+
+        async Task<AgentToolResult> IAgentTool.ExecuteAsync(AgentToolContext context)
+        {
+            try
+            {
+                var parameters = new Dictionary<string, object>();
+                
+                if (context.Parameters.ContainsKey("userId"))
+                    parameters["userId"] = context.Parameters["userId"];
+                if (context.Parameters.ContainsKey("status"))
+                    parameters["status"] = context.Parameters["status"];
+                if (context.Parameters.ContainsKey("dateRange"))
+                    parameters["dateRange"] = context.Parameters["dateRange"];
+                if (context.Parameters.ContainsKey("productCategory"))
+                    parameters["productCategory"] = context.Parameters["productCategory"];
+                if (context.Parameters.ContainsKey("limit"))
+                    parameters["limit"] = context.Parameters["limit"];
+                if (context.Parameters.ContainsKey("offset"))
+                    parameters["offset"] = context.Parameters["offset"];
+                if (context.Parameters.ContainsKey("includeHistory"))
+                    parameters["includeHistory"] = context.Parameters["includeHistory"];
+
+                var mcpResult = await ExecuteInternalAsync(parameters, CancellationToken.None, context);
+
+                if (!mcpResult.Success)
+                {
+                    return new AgentToolResult
+                    {
+                        Success = false,
+                        Error = mcpResult.Error?.Message ?? "Unknown error",
+                        Output = "Failed to retrieve user orders"
+                    };
+                }
+
+                // Properly serialize the data to ensure it can be cast to Dictionary<string, object>
+                var jsonData = JsonSerializer.Serialize(mcpResult.Data);
+                var deserializedData = JsonSerializer.Deserialize<Dictionary<string, object>>(jsonData, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+                return new AgentToolResult
+                {
+                    Success = mcpResult.Success,
+                    Output = "User orders retrieved successfully",
+                    Data = deserializedData ?? new Dictionary<string, object>()
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error executing GetUserOrdersTool in agent context");
+                return new AgentToolResult
+                {
+                    Success = false,
+                    Error = ex.Message,
+                    Output = "Failed to retrieve user orders"
+                };
             }
         }
     }
