@@ -2,6 +2,7 @@ using AgenticOrderingSystem.API.MCP.Interfaces;
 using AgenticOrderingSystem.API.Services;
 using AgenticOrderingSystem.API.Controllers;
 using AgenticOrderingSystem.API.Models;
+using MongoDB.Driver;
 using System.Text.Json;
 
 namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement;
@@ -12,11 +13,13 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement;
 public class UpdateOrderAgentTool : IAgentTool
 {
     private readonly IOrderService _orderService;
+    private readonly IDatabaseService _databaseService;
     private readonly ILogger<UpdateOrderAgentTool> _logger;
 
-    public UpdateOrderAgentTool(IOrderService orderService, ILogger<UpdateOrderAgentTool> logger)
+    public UpdateOrderAgentTool(IOrderService orderService, IDatabaseService databaseService, ILogger<UpdateOrderAgentTool> logger)
     {
         _orderService = orderService;
+        _databaseService = databaseService;
         _logger = logger;
     }
 
@@ -88,6 +91,41 @@ public class UpdateOrderAgentTool : IAgentTool
             // Apply suggested values
             var updatedFields = new List<string>();
             
+            var finalProductId = existingOrder.ProductId;
+            if (suggestedValues?.ContainsKey("product_id") == true)
+            {
+                var newProductId = suggestedValues["product_id"].ToString();
+                if (!string.IsNullOrEmpty(newProductId))
+                {
+                    finalProductId = newProductId;
+                    existingOrder.ProductId = newProductId;
+                    
+                    // Update product info with new product details
+                    var newProduct = await _databaseService.Products.Find(p => p.Id == newProductId).FirstOrDefaultAsync();
+                    if (newProduct != null)
+                    {
+                        existingOrder.ProductInfo.Name = newProduct.Name;
+                        existingOrder.ProductInfo.UnitPrice = newProduct.Price;
+                        existingOrder.ProductInfo.ProductId = newProduct.Id;
+                        updatedFields.Add($"Product: Updated to {newProduct.Name}");
+                    }
+                }
+            }
+            else if (existingOrder.ProductId == "adobe-cc-2023")
+            {
+                finalProductId = "adobe-cc-2024";
+                existingOrder.ProductId = finalProductId;
+                
+                var newProduct = await _databaseService.Products.Find(p => p.Id == finalProductId).FirstOrDefaultAsync();
+                if (newProduct != null)
+                {
+                    existingOrder.ProductInfo.Name = newProduct.Name;
+                    existingOrder.ProductInfo.UnitPrice = newProduct.Price;
+                    existingOrder.ProductInfo.ProductId = newProduct.Id;
+                    updatedFields.Add($"Product: Auto-upgraded from Adobe CC 2023 to 2024");
+                }
+            }
+            
             if (suggestedValues?.ContainsKey("business_justification") == true)
             {
                 var newJustification = suggestedValues["business_justification"].ToString();
@@ -120,8 +158,8 @@ public class UpdateOrderAgentTool : IAgentTool
                 updatedFields.Add($"Required By Date: {requiredDate:yyyy-MM-dd}");
             }
 
-            // Recalculate total amount
-            existingOrder.TotalAmount = await _orderService.CalculateOrderTotalAsync(existingOrder.ProductId, existingOrder.Quantity);
+            // Recalculate total amount with the final product ID
+            existingOrder.TotalAmount = await _orderService.CalculateOrderTotalAsync(finalProductId, existingOrder.Quantity);
 
             // Change status from rejected to created
             existingOrder.Status = "created";

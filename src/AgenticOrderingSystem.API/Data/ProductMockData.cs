@@ -14,6 +14,74 @@ public static class ProductMockData
             // SOFTWARE PRODUCTS
             new Product
             {
+                Id = "adobe-cc-2023",
+                Name = "Adobe Creative Cloud 2023",
+                Description = "Adobe Creative Cloud 2023 suite (discontinued version)",
+                Category = "software",
+                Price = 45.99m,
+                Currency = "USD",
+                IsActive = false,
+                ApprovalModel = new ApprovalModel
+                {
+                    Level1 = new ApprovalLevel
+                    {
+                        Required = true,
+                        ApproverType = "manager",
+                        TimeoutHours = 48,
+                        TriggerConditions = new TriggerConditions
+                        {
+                            MinAmount = 45.99m,
+                            MaxAmount = 10000
+                        }
+                    }
+                },
+                Questions = new List<ProductQuestion>(),
+                Metadata = new ProductMetadata
+                {
+                    Vendor = "Adobe Inc.",
+                    BusinessUnit = "Design & Marketing",
+                    Tags = new List<string> { "design", "creative", "discontinued", "software" },
+                    EstimatedCost = 45.99m,
+                    Currency = "USD"
+                }
+            },
+
+            new Product
+            {
+                Id = "adobe-cc-2024",
+                Name = "Adobe Creative Cloud 2024",
+                Description = "Adobe Creative Cloud 2024 suite (current version)",
+                Category = "software",
+                Price = 52.99m,
+                Currency = "USD",
+                IsActive = true,
+                ApprovalModel = new ApprovalModel
+                {
+                    Level1 = new ApprovalLevel
+                    {
+                        Required = true,
+                        ApproverType = "manager",
+                        TimeoutHours = 48,
+                        TriggerConditions = new TriggerConditions
+                        {
+                            MinAmount = 52.99m,
+                            MaxAmount = 10000
+                        }
+                    }
+                },
+                Questions = new List<ProductQuestion>(),
+                Metadata = new ProductMetadata
+                {
+                    Vendor = "Adobe Inc.",
+                    BusinessUnit = "Design & Marketing",
+                    Tags = new List<string> { "design", "creative", "current", "software" },
+                    EstimatedCost = 52.99m,
+                    Currency = "USD"
+                }
+            },
+
+            new Product
+            {
                 Id = "prod_adobe_creative",
                 Name = "Adobe Creative Suite License",
                 Description = "Complete Adobe Creative Cloud suite including Photoshop, Illustrator, InDesign, Premiere Pro",
