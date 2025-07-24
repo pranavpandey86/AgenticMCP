@@ -11,7 +11,7 @@ public interface IAuthenticationService
 {
     Task<LoginResponse> AuthenticateAsync(LoginRequest request, string ipAddress, string userAgent);
     Task<bool> ValidateTokenAsync(string token);
-    Task<string?> GetUserIdFromTokenAsync(string token);
+    string? GetUserIdFromToken(string token);
     Task<UserSession?> GetSessionAsync(string token);
     Task LogoutAsync(string token);
     Task<bool> IsSessionValidAsync(string token);
