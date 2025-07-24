@@ -66,6 +66,11 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
 
         protected override async Task<ToolResult> ExecuteInternalAsync(object parameters, CancellationToken cancellationToken)
         {
+            return await ExecuteInternalAsync(parameters, cancellationToken, null);
+        }
+
+        private async Task<ToolResult> ExecuteInternalAsync(object parameters, CancellationToken cancellationToken, AgentToolContext? context)
+        {
             try
             {
                 var json = JsonSerializer.Serialize(parameters);
@@ -91,6 +96,11 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
                 if (order == null)
                 {
                     return ToolResult.CreateError("ORDER_NOT_FOUND", $"Order with ID or number '{toolParams.OrderId}' not found");
+                }
+
+                if (order.RequesterId != context?.UserId)
+                {
+                    return ToolResult.CreateError("UNAUTHORIZED", "You can only access your own orders");
                 }
 
                 // Get user details if requested
@@ -347,7 +357,7 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
                 if (context.Parameters.ContainsKey("includeUserDetails"))
                     parameters["includeUserDetails"] = context.Parameters["includeUserDetails"];
 
-                var mcpResult = await ExecuteAsync(parameters);
+                var mcpResult = await ExecuteInternalAsync(parameters, CancellationToken.None, context);
 
                 if (!mcpResult.Success)
                 {

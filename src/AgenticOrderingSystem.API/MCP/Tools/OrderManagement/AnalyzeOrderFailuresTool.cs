@@ -13,6 +13,10 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
     /// </summary>
     public class AnalyzeOrderFailuresTool : BaseMCPTool, IAgentTool
     {
+        private const string USER_ID_PARAMETER = "userId";
+        private const string ORDER_ID_PARAMETER = "orderId";
+        private const string UNKNOWN_VALUE = "unknown";
+        
         private readonly IOrderService _orderService;
         private readonly IUserService _userService;
         private readonly IPerplexityAIService _perplexityAIService;
@@ -105,7 +109,7 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
                 
                 if (targetOrder != null && targetOrder.RequesterId != context?.UserId)
                 {
-                    return ToolResult.CreateError("UNAUTHORIZED", "You can only analyze your own orders");
+                    throw new UnauthorizedAccessException("You can only analyze your own orders");
                 }
                 
                 analysisData.TargetOrder = targetOrder;
@@ -334,10 +338,10 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
             {
                 var parameters = new Dictionary<string, object>();
                 
-                if (context.Parameters.ContainsKey("orderId"))
-                    parameters["orderId"] = context.Parameters["orderId"];
-                if (context.Parameters.ContainsKey("userId"))
-                    parameters["userId"] = context.Parameters["userId"];
+                if (context.Parameters.ContainsKey(ORDER_ID_PARAMETER))
+                    parameters[ORDER_ID_PARAMETER] = context.Parameters[ORDER_ID_PARAMETER];
+                if (context.Parameters.ContainsKey(USER_ID_PARAMETER))
+                    parameters[USER_ID_PARAMETER] = context.Parameters[USER_ID_PARAMETER];
 
                 var mcpResult = await ExecuteInternalAsync(parameters, CancellationToken.None, context);
                 

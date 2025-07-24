@@ -86,6 +86,11 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
 
         protected override async Task<ToolResult> ExecuteInternalAsync(object parameters, CancellationToken cancellationToken)
         {
+            return await ExecuteInternalAsync(parameters, cancellationToken, null);
+        }
+
+        private async Task<ToolResult> ExecuteInternalAsync(object parameters, CancellationToken cancellationToken, AgentToolContext? context)
+        {
             try
             {
                 var json = JsonSerializer.Serialize(parameters);
@@ -99,6 +104,11 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
                 if (toolParams == null || string.IsNullOrEmpty(toolParams.UserId))
                 {
                     return ToolResult.CreateError("INVALID_PARAMETERS", "UserId is required");
+                }
+
+                if (toolParams.UserId != context?.UserId)
+                {
+                    return ToolResult.CreateError("UNAUTHORIZED", "You can only access your own orders");
                 }
 
                 // Verify user exists
