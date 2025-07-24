@@ -8,6 +8,8 @@ namespace AgenticOrderingSystem.API.Controllers;
 [Route("api/[controller]")]
 public class AuthController : ControllerBase
 {
+    private const string UNKNOWN_VALUE = "unknown";
+    
     private readonly IAuthenticationService _authService;
     private readonly IAuditService _auditService;
     private readonly ILogger<AuthController> _logger;
@@ -27,8 +29,8 @@ public class AuthController : ControllerBase
     {
         try
         {
-            var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-            var userAgent = HttpContext.Request.Headers["User-Agent"].FirstOrDefault() ?? "unknown";
+            var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? UNKNOWN_VALUE;
+            var userAgent = HttpContext.Request.Headers["User-Agent"].FirstOrDefault() ?? UNKNOWN_VALUE;
 
             var response = await _authService.AuthenticateAsync(request, ipAddress, userAgent);
 
@@ -76,8 +78,8 @@ public class AuthController : ControllerBase
                 "AUTH",
                 null,
                 "success",
-                HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                HttpContext.Request.Headers["User-Agent"].FirstOrDefault() ?? "unknown"
+                HttpContext.Connection.RemoteIpAddress?.ToString() ?? UNKNOWN_VALUE,
+                HttpContext.Request.Headers["User-Agent"].FirstOrDefault() ?? UNKNOWN_VALUE
             );
 
             return Ok(new { message = "Logged out successfully" });

@@ -15,8 +15,7 @@ namespace AgenticOrderingSystem.API.MCP.Tools.OrderManagement
     {
         private const string USER_ID_PARAMETER = "userId";
         private const string ORDER_ID_PARAMETER = "orderId";
-        private const string UNKNOWN_VALUE = "unknown";
-        
+            
         private readonly IOrderService _orderService;
         private readonly IUserService _userService;
         private readonly IPerplexityAIService _perplexityAIService;

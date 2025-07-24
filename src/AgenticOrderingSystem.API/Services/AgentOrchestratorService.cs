@@ -23,6 +23,9 @@ public interface IAgentOrchestratorService
 /// </summary>
 public class AgentOrchestratorService : IAgentOrchestratorService
 {
+    private const string UPDATE_ORDER_ACTION = "update_order";
+    private const string ORDER_ID_PARAM = "orderId";
+    
     private readonly IEnumerable<IAgentTool> _tools;
     private readonly IConversationStateService _conversationService;
     private readonly IPerplexityAIService _perplexityService;
@@ -75,7 +78,7 @@ public class AgentOrchestratorService : IAgentOrchestratorService
 
                 case "general_help":
                 default:
-                    response = await HandleGeneralHelp(userId, message, conversation);
+                    response = HandleGeneralHelp(userId, message, conversation);
                     break;
             }
 
@@ -139,7 +142,7 @@ public class AgentOrchestratorService : IAgentOrchestratorService
 
                 switch (conversation.PendingAction.ToLowerInvariant())
                 {
-                    case "update_order":
+                    case UPDATE_ORDER_ACTION:
                         return await ExecutePendingUpdateOrder(userId, conversation);
                     
                     default:
@@ -182,7 +185,7 @@ public class AgentOrchestratorService : IAgentOrchestratorService
     {
         try
         {
-            var updateTool = _tools.FirstOrDefault(t => t.Name == "update_order");
+            var updateTool = _tools.FirstOrDefault(t => t.Name == UPDATE_ORDER_ACTION);
             if (updateTool == null)
             {
                 return new AgentResponse
@@ -376,7 +379,7 @@ EXTRACT ORDER ID AND DETERMINE ACTION, RESPOND WITH JSON:";
             return new IntentResult
             {
                 Action = "get_order_details",
-                Parameters = new Dictionary<string, object> { ["orderId"] = orderId },
+                Parameters = new Dictionary<string, object> { [ORDER_ID_PARAM] = orderId },
                 Confidence = 0.8m
             };
         }
@@ -386,7 +389,7 @@ EXTRACT ORDER ID AND DETERMINE ACTION, RESPOND WITH JSON:";
             return new IntentResult
             {
                 Action = "analyze_order_failures",
-                Parameters = new Dictionary<string, object> { ["orderId"] = orderId },
+                Parameters = new Dictionary<string, object> { [ORDER_ID_PARAM] = orderId },
                 Confidence = 0.8m
             };
         }
@@ -412,7 +415,7 @@ EXTRACT ORDER ID AND DETERMINE ACTION, RESPOND WITH JSON:";
             };
         }
 
-        if (!parameters.ContainsKey("orderId"))
+        if (!parameters.ContainsKey(ORDER_ID_PARAM))
         {
             return new AgentResponse
             {
@@ -443,7 +446,7 @@ EXTRACT ORDER ID AND DETERMINE ACTION, RESPOND WITH JSON:";
         }
 
         // Generate a clean, human-readable response about the order
-        var orderId = parameters["orderId"]?.ToString() ?? "unknown";
+        var orderId = parameters[ORDER_ID_PARAM]?.ToString() ?? "unknown";
         var orderResponse = GenerateOrderDetailsResponse(result.Data, orderId);
 
         return new AgentResponse
@@ -736,7 +739,7 @@ EXTRACT ORDER ID AND DETERMINE ACTION, RESPOND WITH JSON:";
             
             response += "🤖 **Do you want me to update your order with the correct values and resubmit it?**";
             
-            conversation.PendingAction = "update_order";
+            conversation.PendingAction = UPDATE_ORDER_ACTION;
             conversation.PendingActionData = parameters;
             await _conversationService.UpdateConversationAsync(conversation);
             

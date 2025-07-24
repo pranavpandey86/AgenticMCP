@@ -27,19 +27,16 @@ public class AuthenticationService : IAuthenticationService
     private readonly IDatabaseService _databaseService;
     private readonly IUserService _userService;
     private readonly ILogger<AuthenticationService> _logger;
-    private readonly IConfiguration _configuration;
     private readonly string _jwtSecret;
 
     public AuthenticationService(
         IDatabaseService databaseService,
         IUserService userService,
-        ILogger<AuthenticationService> logger,
-        IConfiguration configuration)
+        ILogger<AuthenticationService> logger)
     {
         _databaseService = databaseService;
         _userService = userService;
         _logger = logger;
-        _configuration = configuration;
         _jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET") ?? "your-super-secret-jwt-key-change-in-production";
     }
 
