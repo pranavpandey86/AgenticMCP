@@ -35,20 +35,16 @@ jobs:
         dotnet-version: '10.0.x'
         include-prerelease: true
 
-    - name: Restore dependencies
+    - name: Install SonarCloud scanner
       run: |
-        cd src/AgenticOrderingSystem.API
-        dotnet restore
-
-    - name: Build
-      run: |
-        cd src/AgenticOrderingSystem.API  
-        dotnet build --no-restore --configuration Release
-
-    - name: SonarCloud Scan
-      uses: SonarSource/sonarcloud-github-action@master
+        dotnet tool install --global dotnet-sonarscanner
+        
+    - name: Build and analyze
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      with:
-        projectBaseDir: src/AgenticOrderingSystem.API
+      run: |
+        cd src/AgenticOrderingSystem.API
+        dotnet sonarscanner begin /k:"pranavpandey86_AgenticMCP" /o:"pranavpandey86" /d:sonar.token="${{ secrets.SONAR_TOKEN }}" /d:sonar.host.url="https://sonarcloud.io"
+        dotnet build --configuration Release
+        dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
