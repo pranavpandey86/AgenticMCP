@@ -125,7 +125,7 @@ export class ChatService {
     const request = {
       message: message,
       conversationId: this.currentConversationId,  // null for first message
-      userId: "demo-user-001"
+      userId: "mkt_david_designer"  // Use the test user who owns TEAM-FAIL-001
     };
 
     return this.http.post<ConversationResponse>(
@@ -147,7 +147,7 @@ export class ChatService {
     const request = {
       conversationId: conversationId,
       confirmed: confirmed,
-      userId: "demo-user-001"
+      userId: "mkt_david_designer"  // Use the test user who owns TEAM-FAIL-001
     };
 
     return this.http.post<ConversationResponse>(
